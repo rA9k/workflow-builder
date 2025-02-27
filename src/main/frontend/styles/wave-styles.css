@@ -1,0 +1,146 @@
+:root {
+  --vaadin-overlay-z-index: 3000 !important;
+}
+
+.workflow-layout {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+    background-color: #f5f5f5;
+}
+
+.toolbar-button { font-size: 0.8rem; /* smaller text / padding: 0.3rem 0.5rem; / less padding */ }
+/* Adjust toolbar buttons */
+.workflow-button.toolbar-button {
+    font-size: 1rem !important;
+    padding: 1.4em 1.1rem !important;
+}
+
+.canvas-container {
+    position: relative;
+    flex: 1;
+    overflow: hidden;
+    background-color: #ffffff;
+}
+
+.workflow-canvas {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: #ffffff;
+    z-index: 2;
+    justify-content: center; /* Center horizontally */
+    align-items: center;     /* Center vertically */
+}
+
+.properties-panel {
+  background-color: #f8f9fa;
+  border-left: 1px solid #dee2e6;
+  position: fixed;
+  top: 0;
+  right: -300px; /* Initially hidden off-screen */
+  width: 300px;
+  height: 100%;
+  transition: right 0.3s ease-in-out; /* Smooth transition */
+  overflow-y: auto;
+  z-index: 1000;
+  visibility: hidden;
+}
+
+.properties-panel.open {
+    right: 0; /* Slide in from the right */
+    visibility: visible;
+}
+
+.workflow-canvas {
+    transition: margin-left 0.3s ease-in-out;
+}
+
+.sidebar-panel {
+    background-color: #fff;
+    border-right: 1px solid #dee2e6;
+    z-index: 3;
+}
+
+.connector-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+}
+  .workflow-button {
+      margin: 0 1rem;
+      padding: 1.5rem; /* Increased padding */
+      font-size: 1.2rem; /* Added font-size */
+      background-color: #ffffff;
+      border: 1px solid #dee2e6;
+      border-radius: 4px;
+      cursor: move;
+      z-index: 4;
+      transition: all 0.2s ease-in-out;
+      position: relative;
+  }
+
+  .workflow-button:hover {
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  }
+
+  .sidebar-button {
+      margin: 0 1rem;
+      padding: 0.5rem; /* Smaller padding */
+      font-size: 1rem; /* Smaller font-size */
+      background-color: #ffffff;
+      border: 1px solid #dee2e6;
+      border-radius: 4px;
+      cursor: move;
+      z-index: 4;
+      transition: all 0.2s ease-in-out;
+      position: relative;
+  }
+
+  .workflow-button.selected {
+      border-top: 2px solid #1a73e8;
+      border-right: 2px solid #1a73e8;
+      border-bottom: 2px solid #1a73e8;
+  }
+  
+  /* Override Vaadin ComboBox overlay z-index to fix dropdown appearing behind properties panel */
+  vaadin-combo-box-overlay {
+    z-index: 3000 !important;
+  }
+
+  /* Add this to your CSS file */
+vaadin-select-overlay {
+  z-index: 3000 !important;
+}
+
+/* For any other Vaadin overlay elements that might be used */
+vaadin-overlay {
+  z-index: 3000 !important;
+}
+
+/* Responsive styles */
+@media (max-width: 768px) {
+    .sidebar-panel {
+        width: auto;
+        transition: margin-left 0.3s ease-in-out;
+        cursor: pointer; /* Indicate it's clickable */
+    }
+
+    .sidebar-panel.collapsed {
+        margin-left: -180px; /* Hide most of the sidebar */
+    }
+
+    .canvas-container {
+        flex: 1;
+    }
+
+    .properties-panel.open {
+        width: 100%; /* Take full width on smaller screens */
+    }
+}

@@ -1,0 +1,7 @@
+node_modules
+/src/main/frontend/generated/
+target/
+src/main/bundles/
+.vscode/
+vite.generated.ts
+.idea/
