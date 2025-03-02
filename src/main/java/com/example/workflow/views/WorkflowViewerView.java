@@ -4,9 +4,11 @@ import com.example.workflow.model.WorkflowJsonEntity;
 import com.example.workflow.repository.WorkflowJsonRepository;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
+import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.grid.GridVariant;
 import com.vaadin.flow.component.html.H1;
+import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.router.Route;
@@ -64,44 +66,24 @@ public class WorkflowViewerView extends VerticalLayout {
                 .setHeader("Name")
                 .setAutoWidth(true);
 
-        // View/Edit button column
+        // Actions column with multiple buttons
         workflowGrid.addComponentColumn(entity -> {
+            // View/Edit button
             Button viewEditButton = new Button("View/Edit");
             viewEditButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
             viewEditButton.addClickListener(e ->
                     getUI().ifPresent(ui -> ui.navigate(WorkflowCreatorView.class, entity.getId()))
             );
 
-            // Save As button column
-            Button saveAsButton = new Button("Save As");
-            saveAsButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
-            saveAsButton.addClickListener(e -> {
-                // Implement Save As functionality here
-                // 1. Open a dialog to ask for the new workflow name
-                // 2. Save the workflow as a new entity with the given name
-                com.vaadin.flow.component.dialog.Dialog dialog = new com.vaadin.flow.component.dialog.Dialog();
-                com.vaadin.flow.component.textfield.TextField workflowNameField = new com.vaadin.flow.component.textfield.TextField("New Workflow Name");
-                Button saveButton = new Button("Save", saveEvent -> {
-                    String newWorkflowName = workflowNameField.getValue();
-                    if (newWorkflowName != null && !newWorkflowName.isEmpty()) {
-                        // Save the workflow as a new entity with the given name
-                        WorkflowJsonEntity newWorkflow = new WorkflowJsonEntity();
-                        newWorkflow.setName(newWorkflowName);
-                        newWorkflow.setData(entity.getData()); // Copy the JSON from the existing workflow
-                        workflowJsonRepository.save(newWorkflow);
-                        loadWorkflows(); // Refresh the grid
-                        dialog.close();
-                    } else {
-                        com.vaadin.flow.component.notification.Notification.show("Workflow name cannot be empty");
-                    }
-                });
-                Button cancelButton = new Button("Cancel", cancelEvent -> dialog.close());
+            // Delete button
+            Button deleteButton = new Button("Delete");
+            deleteButton.addThemeVariants(ButtonVariant.LUMO_ERROR);
+            deleteButton.addClickListener(e -> showDeleteConfirmationDialog(entity));
 
-                com.vaadin.flow.component.orderedlayout.HorizontalLayout buttonLayout = new com.vaadin.flow.component.orderedlayout.HorizontalLayout(saveButton, cancelButton);
-                dialog.add(workflowNameField, buttonLayout);
-                dialog.open();
-            });
-            return viewEditButton;
+            // Create layout for action buttons
+            HorizontalLayout actions = new HorizontalLayout(viewEditButton, deleteButton);
+            actions.setSpacing(true);
+            return actions;
         }).setHeader("Actions")
           .setAutoWidth(true);
 
@@ -109,7 +91,9 @@ public class WorkflowViewerView extends VerticalLayout {
         workflowGrid.addComponentColumn(entity -> {
             Button useButton = new Button("Use");
             useButton.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
-            // Placeholder: Implement use functionality as needed
+            useButton.addClickListener(e -> 
+                getUI().ifPresent(ui -> ui.navigate(WorkflowUseView.class, entity.getId()))
+            );
             return useButton;
         }).setHeader("")
           .setAutoWidth(true);
@@ -118,14 +102,35 @@ public class WorkflowViewerView extends VerticalLayout {
         workflowGrid.addThemeVariants(GridVariant.LUMO_NO_BORDER, GridVariant.LUMO_ROW_STRIPES);
         workflowGrid.setHeightFull();
 
-        // Enable navigation on row click
+        // Enable navigation on row click (for view/edit)
         workflowGrid.addItemClickListener(event -> 
             getUI().ifPresent(ui -> ui.navigate(WorkflowCreatorView.class, event.getItem().getId()))
         );
     }
 
+
     private void loadWorkflows() {
         List<WorkflowJsonEntity> workflows = workflowJsonRepository.findAll();
         workflowGrid.setItems(workflows);
+    }
+
+    private void showDeleteConfirmationDialog(WorkflowJsonEntity entity) {
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle("Confirm Deletion");
+        dialog.add("Are you sure you want to permanently delete this workflow?");
+
+        Button confirmButton = new Button("Delete", e -> {
+            workflowJsonRepository.delete(entity);
+            loadWorkflows();
+            dialog.close();
+            Notification.show("Workflow deleted successfully.");
+        });
+        confirmButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR);
+
+        Button cancelButton = new Button("Cancel", e -> dialog.close());
+
+        dialog.getFooter().add(cancelButton, confirmButton);
+
+        dialog.open();
     }
 }

@@ -24,6 +24,7 @@ import com.vaadin.flow.router.HasUrlParameter;
 import com.vaadin.flow.router.OptionalParameter;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.router.RouteAlias;
+import com.vaadin.flow.component.button.ButtonVariant;
 
 import java.util.*;
 
@@ -639,8 +640,46 @@ private HorizontalLayout createActionButtons() {
     styleActionButton(deleteBtn, "#dc3545"); 
     styleActionButton(clearAllBtn, "#ffc107");
     styleActionButton(viewWorkflowsBtn, "#17a2b8");
-
     HorizontalLayout btnLayout = new HorizontalLayout(saveBtn, deleteBtn, clearAllBtn, viewWorkflowsBtn);
+    Button saveAsButton = new Button("Save As", e -> {
+        // Create a dummy WorkflowJsonEntity for now. The data will be populated from the current workflow.
+        WorkflowJsonEntity entity = new WorkflowJsonEntity();
+        // Need to get the current workflow data here
+
+        // 1) Build a list of node data
+        List<Map<String, Object>> nodesData = new ArrayList<>();
+
+        workflowCanvas.getChildren()
+                .filter(c -> c != connectorLayer)
+                .forEach(component -> {
+                    WorkflowNodeProperties props = nodeProperties.get(component);
+                    if (props != null) {
+                        Map<String, Object> nodeMap = new HashMap<>();
+                        nodeMap.put("name", props.name);
+                        nodeMap.put("type", props.type);
+                        nodeMap.put("description", props.description);
+                        nodeMap.put("props", props.additionalProperties);
+                        nodeMap.put("order", workflowCanvas.indexOf(component));
+                        nodesData.add(nodeMap);
+                    }
+                });
+        // 2) Serialize to JSON
+        ObjectMapper mapper = new ObjectMapper();
+        String jsonData = null;
+        try {
+            jsonData = mapper.writeValueAsString(nodesData);
+        } catch (Exception ex) {
+            Notification.show("Error saving workflow: " + ex.getMessage());
+            return;
+        }
+
+        entity.setData(jsonData);
+        showSaveAsDialog(entity);
+    });
+    styleActionButton(saveAsButton, "#28a745");
+
+    btnLayout.add(saveAsButton);
+
     btnLayout.setWidthFull();
     btnLayout.setJustifyContentMode(JustifyContentMode.CENTER);
     btnLayout.setSpacing(true);
@@ -857,6 +896,45 @@ private void setEditMode(boolean editMode) {
         }
     });
 }
+
+    private void showSaveAsDialog(WorkflowJsonEntity entity) {
+        Dialog dialog = new Dialog();
+        dialog.setWidth("400px");
+        
+        TextField workflowNameField = new TextField("New Workflow Name");
+        workflowNameField.setWidthFull();
+        workflowNameField.setPlaceholder("Enter a name for the new workflow");
+        
+        Button saveButton = new Button("Save", saveEvent -> {
+            String newWorkflowName = workflowNameField.getValue();
+            if (newWorkflowName != null && !newWorkflowName.isEmpty()) {
+                // Save the workflow as a new entity with the given name
+                WorkflowJsonEntity newWorkflow = new WorkflowJsonEntity();
+                newWorkflow.setName(newWorkflowName);
+                newWorkflow.setData(entity.getData()); // Copy the JSON from the existing workflow
+                workflowJsonRepository.save(newWorkflow);
+                Notification.show("Workflow saved as '" + newWorkflowName + "'");
+                dialog.close();
+            } else {
+                Notification.show("Workflow name cannot be empty");
+            }
+        });
+        saveButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+        
+        Button cancelButton = new Button("Cancel", cancelEvent -> dialog.close());
+        
+        HorizontalLayout buttonLayout = new HorizontalLayout(saveButton, cancelButton);
+        buttonLayout.setWidthFull();
+        buttonLayout.setJustifyContentMode(JustifyContentMode.END);
+        buttonLayout.setSpacing(true);
+        
+        VerticalLayout dialogLayout = new VerticalLayout(workflowNameField, buttonLayout);
+        dialogLayout.setPadding(true);
+        dialogLayout.setSpacing(true);
+        
+        dialog.add(dialogLayout);
+        dialog.open();
+    }
 
     // ========== Utility ==========
 
