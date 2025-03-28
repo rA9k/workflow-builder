@@ -1,7 +1,9 @@
 node_modules
-/src/main/frontend/generated/
+frontend/generated/
 target/
 src/main/bundles/
 .vscode/
 vite.generated.ts
 .idea/
+src/main/dev-bundle
+*.zip

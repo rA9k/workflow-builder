@@ -144,3 +144,34 @@ vaadin-overlay {
         width: 100%; /* Take full width on smaller screens */
     }
 }
+
+/* Styles for workflow stage badges */
+.badge-completed {
+    background-color: #4CAF50 !important;
+    color: white !important;
+}
+
+.badge-rejected {
+    background-color: #F44336 !important;
+    color: white !important;
+}
+
+.badge-upload {
+    background-color: #2196F3 !important; /* Blue */
+    color: white !important;
+}
+
+.badge-docreview {
+    background-color: #FFC107 !important; /* Amber */
+    color: black !important;
+}
+
+.badge-approval {
+    background-color: #9C27B0 !important; /* Purple */
+    color: white !important;
+}
+
+.badge-default {
+    background-color: #E0E0E0 !important;
+    color: black !important;
+}

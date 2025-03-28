@@ -1,6 +1,8 @@
 package com.example.workflow.views;
 
+import com.example.workflow.model.WorkflowExecutionEntity;
 import com.example.workflow.model.WorkflowJsonEntity;
+import com.example.workflow.repository.WorkflowExecutionRepository;
 import com.example.workflow.repository.WorkflowJsonRepository;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
@@ -12,17 +14,21 @@ import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.router.Route;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
-@Route("workflow-viewer")
+@Route(value = "workflow-viewer", layout = MainView.class)
 public class WorkflowViewerView extends VerticalLayout {
 
     private final WorkflowJsonRepository workflowJsonRepository;
+    private final WorkflowExecutionRepository workflowExecutionRepository;
     private final Grid<WorkflowJsonEntity> workflowGrid = new Grid<>(WorkflowJsonEntity.class);
 
-    public WorkflowViewerView(WorkflowJsonRepository workflowJsonRepository) {
+    public WorkflowViewerView(WorkflowJsonRepository workflowJsonRepository,
+                              WorkflowExecutionRepository workflowExecutionRepository) {
         this.workflowJsonRepository = workflowJsonRepository;
+        this.workflowExecutionRepository = workflowExecutionRepository;
 
         // Overall layout styling for a modern feel
         addClassName("workflow-viewer");
@@ -66,7 +72,7 @@ public class WorkflowViewerView extends VerticalLayout {
                 .setHeader("Name")
                 .setAutoWidth(true);
 
-        // Actions column with multiple buttons
+        // Actions column with multiple buttons (View/Edit and Delete)
         workflowGrid.addComponentColumn(entity -> {
             // View/Edit button
             Button viewEditButton = new Button("View/Edit");
@@ -80,20 +86,26 @@ public class WorkflowViewerView extends VerticalLayout {
             deleteButton.addThemeVariants(ButtonVariant.LUMO_ERROR);
             deleteButton.addClickListener(e -> showDeleteConfirmationDialog(entity));
 
-            // Create layout for action buttons
+            // Layout for action buttons
             HorizontalLayout actions = new HorizontalLayout(viewEditButton, deleteButton);
             actions.setSpacing(true);
             return actions;
         }).setHeader("Actions")
           .setAutoWidth(true);
 
-        // Use button column
+        // Use button column – creates a new execution instance every time.
+        // Notice the navigation now uses the route alias "workflow-use/new"
         workflowGrid.addComponentColumn(entity -> {
             Button useButton = new Button("Use");
             useButton.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
-            useButton.addClickListener(e -> 
-                getUI().ifPresent(ui -> ui.navigate(WorkflowUseView.class, entity.getId()))
-            );
+            useButton.addClickListener(e -> {
+    // Navigate to the new execution route. 
+    // Make sure that 'entity' here is a WorkflowJsonEntity.
+    getUI().ifPresent(ui -> ui.getPage().setLocation("workflow-use/new/" + entity.getId()));
+    Notification.show("New workflow instance created. " +
+        "If previously uploaded files have expired, please re-upload them.");
+});
+
             return useButton;
         }).setHeader("")
           .setAutoWidth(true);
@@ -101,29 +113,48 @@ public class WorkflowViewerView extends VerticalLayout {
         // Apply modern grid themes
         workflowGrid.addThemeVariants(GridVariant.LUMO_NO_BORDER, GridVariant.LUMO_ROW_STRIPES);
         workflowGrid.setHeightFull();
-
-        // Enable navigation on row click (for view/edit)
-        workflowGrid.addItemClickListener(event -> 
-            getUI().ifPresent(ui -> ui.navigate(WorkflowCreatorView.class, event.getItem().getId()))
-        );
     }
 
+    /**
+     * Creates a new workflow execution instance for the selected workflow.
+     * This method is now used solely when deleting or for other operations if needed.
+     * The "Use" button now navigates via the new route alias.
+     */
+    private WorkflowExecutionEntity createNewWorkflowExecution(WorkflowJsonEntity workflowEntity) {
+        WorkflowExecutionEntity executionEntity = new WorkflowExecutionEntity();
+        executionEntity.setWorkflow(workflowEntity);
+        executionEntity.setStatus("NEW");
+        // Set any other required properties for a new execution
+        return workflowExecutionRepository.save(executionEntity);
+    }
 
     private void loadWorkflows() {
         List<WorkflowJsonEntity> workflows = workflowJsonRepository.findAll();
         workflowGrid.setItems(workflows);
     }
 
+    @Transactional
     private void showDeleteConfirmationDialog(WorkflowJsonEntity entity) {
         Dialog dialog = new Dialog();
         dialog.setHeaderTitle("Confirm Deletion");
         dialog.add("Are you sure you want to permanently delete this workflow?");
 
         Button confirmButton = new Button("Delete", e -> {
-            workflowJsonRepository.delete(entity);
-            loadWorkflows();
-            dialog.close();
-            Notification.show("Workflow deleted successfully.");
+            // Delete associated workflow executions first
+            try {
+                List<WorkflowExecutionEntity> executions = workflowExecutionRepository.findByWorkflow(entity);
+                workflowExecutionRepository.deleteAll(executions);
+
+                // Then delete the workflow
+                workflowJsonRepository.delete(entity);
+                loadWorkflows();
+                dialog.close();
+                Notification.show("Workflow deleted successfully.");
+            } catch (Exception ex) {
+                dialog.close();
+                Notification.show("Error deleting workflow: " + ex.getMessage(),
+                        5000, Notification.Position.BOTTOM_CENTER);
+            }
         });
         confirmButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR);
 
