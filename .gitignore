@@ -7,3 +7,4 @@ vite.generated.ts
 .idea/
 src/main/dev-bundle
 *.zip
+.env

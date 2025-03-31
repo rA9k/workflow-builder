@@ -1,7 +1,6 @@
 package com.example.workflow.views;
 
 import com.example.workflow.model.WorkflowExecutionEntity;
-import com.example.workflow.model.WorkflowJsonEntity;
 import com.example.workflow.repository.WorkflowExecutionRepository;
 import com.example.workflow.repository.WorkflowJsonRepository;
 import com.example.workflow.service.WorkflowExecutionService;
@@ -18,19 +17,16 @@ import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.TextField;
-import com.vaadin.flow.data.provider.DataProvider;
 import com.vaadin.flow.data.renderer.ComponentRenderer;
 import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
-import com.vaadin.flow.server.StreamResource;
 
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.io.ByteArrayInputStream;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.List;
@@ -41,8 +37,6 @@ import java.util.stream.Collectors;
 @PageTitle("Workflows In Use")
 public class WorkflowInUseListView extends VerticalLayout {
 
-    private final WorkflowExecutionRepository workflowExecutionRepository;
-    private final WorkflowJsonRepository workflowJsonRepository;
     private final WorkflowExecutionService workflowExecutionService;
     private Grid<WorkflowExecutionEntity> grid;
     private TextField filter;
@@ -50,8 +44,7 @@ public class WorkflowInUseListView extends VerticalLayout {
     public WorkflowInUseListView(WorkflowExecutionRepository workflowExecutionRepository,
             WorkflowJsonRepository workflowJsonRepository,
             WorkflowExecutionService workflowExecutionService) {
-        this.workflowExecutionRepository = workflowExecutionRepository;
-        this.workflowJsonRepository = workflowJsonRepository;
+
         this.workflowExecutionService = workflowExecutionService;
 
         setSizeFull();
@@ -256,7 +249,7 @@ public class WorkflowInUseListView extends VerticalLayout {
     }
 
     private void showNotification(String message) {
-        com.vaadin.flow.component.notification.Notification notification = com.vaadin.flow.component.notification.Notification
+        com.vaadin.flow.component.notification.Notification
                 .show(message, 3000,
                         com.vaadin.flow.component.notification.Notification.Position.BOTTOM_START);
     }
