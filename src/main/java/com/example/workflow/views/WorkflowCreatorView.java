@@ -5,6 +5,8 @@ import com.example.workflow.opa.WorkflowOPAService;
 import com.example.workflow.repository.WorkflowJsonRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vaadin.flow.component.AttachEvent;
+import com.vaadin.flow.component.dependency.JsModule;
+import com.vaadin.flow.component.page.Viewport;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.HasComponents;
 import com.vaadin.flow.component.UI;
@@ -16,7 +18,10 @@ import com.vaadin.flow.component.dnd.DropTarget;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H3;
+import com.vaadin.flow.component.icon.Icon;
+import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.notification.Notification;
+import com.vaadin.flow.component.orderedlayout.FlexLayout;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.TextField;
@@ -33,6 +38,8 @@ import java.util.*;
 @Route(value = "workflow-creator")
 @RouteAlias(value = "workflow-creator/:workflowId?")
 @CssImport("./styles/wave-styles.css")
+@CssImport("./styles/responsive-workflow.css") // New responsive styles
+@JsModule("./js/workflow-responsive.js") // New responsive JS
 public class WorkflowCreatorView extends VerticalLayout implements HasUrlParameter<Long> {
 
     private final HorizontalLayout workflowCanvas;
@@ -124,20 +131,34 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
         mainContainer.setSizeFull();
         mainContainer.setPadding(false);
         mainContainer.setSpacing(false);
+        mainContainer.setClassName("responsive-main-container");
 
         componentsPanel = new VerticalLayout();
         componentsPanel.addClassName("sidebar-panel");
+        componentsPanel.addClassName("responsive-sidebar");
         componentsPanel.setWidth("200px");
         componentsPanel.setHeight("100%");
         componentsPanel.getStyle()
                 .set("background-color", "#f8f9fa")
                 .set("padding", "1rem")
                 .set("box-shadow", "2px 0 5px rgba(0,0,0,0.1)")
-                .set("z-index", "2")
+                .set("z-index", "1000")
                 .set("flex-shrink", "0");
 
         H3 componentsTitle = new H3("Components");
         componentsTitle.getStyle().set("margin", "0 0 1rem 0");
+
+        // Add a toggle button for mobile view
+        Button toggleSidebarBtn = new Button(new Icon(VaadinIcon.MENU));
+        toggleSidebarBtn.addClassName("mobile-toggle-btn");
+        toggleSidebarBtn.addClickListener(e -> {
+            componentsPanel.getElement().executeJs(
+                    "this.classList.toggle('mobile-open')");
+        });
+
+        // Add the toggle button only for mobile view using CSS
+        Div mobileHeader = new Div(toggleSidebarBtn);
+        mobileHeader.addClassName("mobile-header");
 
         componentsPanel.addClickListener(event -> {
             if (componentsPanel.getClassNames().contains("collapsed")) {
@@ -214,11 +235,12 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
         editModeToggle.setValue(true);
         editModeToggle.addValueChangeListener(e -> setEditMode(e.getValue()));
         btnLayout.add(editModeToggle);
-
+        addComponentAsFirst(mobileHeader);
         add(mainContainer, btnLayout);
         setFlexGrow(1, mainContainer);
 
         setupCanvasDropTarget();
+
     }
 
     // -- Canvas & Drag/Drop methods (createDraggableButton, createWorkflowButton,
@@ -438,7 +460,33 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
         if (!editMode)
             return;
         propertiesPanel.removeAll();
-        propertiesPanel.add(new H3("Properties"));
+
+        // Create a header layout with title and close button
+        HorizontalLayout headerLayout = new HorizontalLayout();
+        headerLayout.setWidthFull();
+        headerLayout.setJustifyContentMode(JustifyContentMode.BETWEEN);
+        headerLayout.setAlignItems(Alignment.CENTER);
+
+        H3 propertiesTitle = new H3("Properties");
+        propertiesTitle.getStyle().set("margin", "0");
+
+        // Create close button with icon
+        Button closeButton = new Button(new Icon(VaadinIcon.CLOSE));
+        closeButton.addClassName("properties-close-btn");
+        closeButton.getStyle()
+                .set("background", "transparent")
+                .set("color", "#666")
+                .set("padding", "0.5rem")
+                .set("min-width", "auto")
+                .set("border-radius", "50%")
+                .set("cursor", "pointer");
+
+        closeButton.addClickListener(e -> {
+            deselectComponent();
+        });
+
+        headerLayout.add(propertiesTitle, closeButton);
+        propertiesPanel.add(headerLayout);
 
         final WorkflowNodeProperties props = nodeProperties.computeIfAbsent(component, k -> {
             WorkflowNodeProperties newProps = new WorkflowNodeProperties();
@@ -472,25 +520,26 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
         deptSelectLocal.setWidthFull();
 
         // Add/Remove Selects based on type
+        // In the showPropertiesPanel method, modify the code for the Select components:
+
         if ("Upload".equals(props.type)) {
-            typeSelectLocal.setValue(props.additionalProperties.getOrDefault("documentType", "Invoice"));
+            String defaultDocType = props.additionalProperties.getOrDefault("documentType", "Invoice");
+            props.additionalProperties.put("documentType", defaultDocType); // Add this line
+            typeSelectLocal.setValue(defaultDocType);
             typeSelectLocal.addValueChangeListener(e -> {
                 props.additionalProperties.put("documentType", e.getValue());
-                // Refresh the type-specific fields whenever the document type changes
-                VerticalLayout typeSpecificFields = (VerticalLayout) propertiesPanel.getChildren()
-                        .filter(c -> c instanceof VerticalLayout && c != typeSelectLocal.getParent().get())
-                        .findFirst().orElse(new VerticalLayout());
-                typeSpecificFields.removeAll();
-                addTypeSpecificFields(typeSpecificFields, props);
-
+                // Rest of the code remains the same
             });
             propertiesPanel.add(typeSelectLocal);
         } else if ("Document Review".equals(props.type)) {
-            deptSelectLocal.setValue(props.additionalProperties.getOrDefault("department", "HR"));
+            String defaultDept = props.additionalProperties.getOrDefault("department", "HR");
+            props.additionalProperties.put("department", defaultDept); // Add this line
+            deptSelectLocal.setValue(defaultDept);
             deptSelectLocal.addValueChangeListener(e -> {
                 props.additionalProperties.put("department", e.getValue());
             });
             propertiesPanel.add(deptSelectLocal);
+
         } else if ("Custom Field".equals(props.type)) {
             TextField labelField = new TextField("Label");
             labelField.setValue(props.additionalProperties.getOrDefault("label", ""));
@@ -535,7 +584,11 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
                 reviewerRoleSelect.setLabel("Reviewer Role");
                 reviewerRoleSelect.setItems("Manager", "Team Lead", "Analyst", "Senior Analyst");
                 reviewerRoleSelect.setWidthFull();
-                reviewerRoleSelect.setValue(props.additionalProperties.getOrDefault("reviewerRole", "Manager"));
+
+                String defaultReviewerRole = props.additionalProperties.getOrDefault("reviewerRole", "Manager");
+                props.additionalProperties.put("reviewerRole", defaultReviewerRole); // Add this line
+                reviewerRoleSelect.setValue(defaultReviewerRole);
+
                 reviewerRoleSelect
                         .addValueChangeListener(e -> props.additionalProperties.put("reviewerRole", e.getValue()));
                 container.add(reviewerRoleSelect);
@@ -545,7 +598,11 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
                 approverRoleSelect.setLabel("Approver Role");
                 approverRoleSelect.setItems("HR Head", "Senior Manager", "Senior Accountant");
                 approverRoleSelect.setWidthFull();
-                approverRoleSelect.setValue(props.additionalProperties.getOrDefault("Approver Role", "Senior Manager"));
+
+                String defaultApproverRole = props.additionalProperties.getOrDefault("Approver Role", "Senior Manager");
+                props.additionalProperties.put("Approver Role", defaultApproverRole); // Add this line
+                approverRoleSelect.setValue(defaultApproverRole);
+
                 approverRoleSelect
                         .addValueChangeListener(e -> props.additionalProperties.put("Approver Role", e.getValue()));
                 container.add(approverRoleSelect);
@@ -616,6 +673,7 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
         styleActionButton(clearAllBtn, "#ffc107");
         styleActionButton(viewWorkflowsBtn, "#17a2b8");
         HorizontalLayout btnLayout = new HorizontalLayout(saveBtn, deleteBtn, clearAllBtn, viewWorkflowsBtn);
+        btnLayout.addClassName("responsive-button-layout");
         Button saveAsButton = new Button("Save As", e -> {
             // Create a dummy WorkflowJsonEntity for now. The data will be populated from
             // the current workflow.
@@ -659,7 +717,9 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
         btnLayout.setWidthFull();
         btnLayout.setJustifyContentMode(JustifyContentMode.CENTER);
         btnLayout.setSpacing(true);
-        btnLayout.getStyle().set("padding", "1rem");
+        btnLayout.getStyle()
+                .set("padding", "1rem")
+                .set("flex-wrap", "wrap"); // Use style property instead of setFlexWrap
 
         return btnLayout;
     }

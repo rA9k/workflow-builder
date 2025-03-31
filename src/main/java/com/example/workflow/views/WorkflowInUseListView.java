@@ -24,11 +24,17 @@ import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.StreamResource;
+
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.ByteArrayInputStream;
 import java.time.format.DateTimeFormatter;
+import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @CssImport("styles/wave-styles.css")
 @Route(value = "workflows-in-use", layout = MainView.class)
@@ -42,8 +48,8 @@ public class WorkflowInUseListView extends VerticalLayout {
     private TextField filter;
 
     public WorkflowInUseListView(WorkflowExecutionRepository workflowExecutionRepository,
-                                 WorkflowJsonRepository workflowJsonRepository,
-                                 WorkflowExecutionService workflowExecutionService) {
+            WorkflowJsonRepository workflowJsonRepository,
+            WorkflowExecutionService workflowExecutionService) {
         this.workflowExecutionRepository = workflowExecutionRepository;
         this.workflowJsonRepository = workflowJsonRepository;
         this.workflowExecutionService = workflowExecutionService;
@@ -91,14 +97,26 @@ public class WorkflowInUseListView extends VerticalLayout {
 
         grid.addColumn(new ComponentRenderer<>(entity -> {
             String stageName = "Unknown Stage";
-            String badgeStyle = "padding: 0.25em 0.5em; border-radius: 4px; background-color: #E0E0E0; color: black;"; // Default style
+            String badgeStyle = "padding: 0.25em 0.5em; border-radius: 4px; background-color: #E0E0E0; color: black;"; // Default
+            // ADD THE STATUS CHECK HERE, BEFORE THE TRY BLOCK
+            if ("Completed".equals(entity.getStatus())) {
+                stageName = "Completed";
+                badgeStyle = "padding: 0.25em 0.5em; border-radius: 4px; background-color: #4CAF50; color: white;";
+                return new Span(new com.vaadin.flow.component.Html(
+                        "<span style='" + badgeStyle + "'>" + stageName + "</span>"));
+            } else if ("Rejected".equals(entity.getStatus())) {
+                stageName = "Rejected";
+                badgeStyle = "padding: 0.25em 0.5em; border-radius: 4px; background-color: #F44336; color: white;";
+                return new Span(new com.vaadin.flow.component.Html(
+                        "<span style='" + badgeStyle + "'>" + stageName + "</span>"));
+            }
 
             try {
                 com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
                 java.util.List<java.util.Map<String, Object>> workflowNodes = mapper.readValue(
-                    entity.getWorkflow().getData(),
-                    new com.fasterxml.jackson.core.type.TypeReference<java.util.List<java.util.Map<String, Object>>>() {}
-                );
+                        entity.getWorkflow().getData(),
+                        new com.fasterxml.jackson.core.type.TypeReference<java.util.List<java.util.Map<String, Object>>>() {
+                        });
 
                 int currentNodeIndex = entity.getCurrentNodeIndex();
                 if (currentNodeIndex >= 0 && currentNodeIndex < workflowNodes.size()) {
@@ -136,7 +154,8 @@ public class WorkflowInUseListView extends VerticalLayout {
             }
 
             // Return a Span with inline styles
-            return new Span(new com.vaadin.flow.component.Html("<span style='" + badgeStyle + "'>" + stageName + "</span>"));
+            return new Span(
+                    new com.vaadin.flow.component.Html("<span style='" + badgeStyle + "'>" + stageName + "</span>"));
         })).setHeader("Status").setSortable(true).setWidth("100px");
 
         grid.addColumn(entity -> {
@@ -165,13 +184,20 @@ public class WorkflowInUseListView extends VerticalLayout {
             detailsButton.getStyle().set("font-size", "0.8em");
             detailsButton.addClickListener(e -> showDetails(entity));
 
-            Button deleteButton = new Button("Delete");
-            deleteButton.getStyle().set("font-size", "0.8em");
-            deleteButton.getStyle().set("color", "white");
-            deleteButton.getStyle().set("background-color", "#F44336");
-            deleteButton.addClickListener(e -> confirmDelete(entity));
+            // Only show delete button if current user is the creator of the workflow
+            // instance
+            String currentUsername = getCurrentUsername();
+            if (currentUsername.equals(entity.getCreatedBy())) {
+                Button deleteButton = new Button("Delete");
+                deleteButton.getStyle().set("font-size", "0.8em");
+                deleteButton.getStyle().set("color", "white");
+                deleteButton.getStyle().set("background-color", "#F44336");
+                deleteButton.addClickListener(e -> confirmDelete(entity));
+                actions.add(viewButton, detailsButton, deleteButton);
+            } else {
+                actions.add(viewButton, detailsButton);
+            }
 
-            actions.add(viewButton, detailsButton, deleteButton);
             return actions;
         })).setHeader("Actions").setAutoWidth(true);
 
@@ -184,56 +210,56 @@ public class WorkflowInUseListView extends VerticalLayout {
     }
 
     private void confirmDelete(WorkflowExecutionEntity entity) {
-    Dialog confirmDialog = new Dialog();
-    confirmDialog.setWidth("400px");
-    
-    VerticalLayout layout = new VerticalLayout();
-    layout.setPadding(true);
-    layout.setSpacing(true);
-    
-    H3 title = new H3("Confirm Delete");
-    Paragraph confirmation = new Paragraph("Are you sure you want to delete the workflow execution for \"" 
-            + entity.getUploadedFileName() + "\"?");
-    Paragraph warning = new Paragraph("This action cannot be undone.");
-    warning.getStyle().set("color", "red");
-    
-    HorizontalLayout buttons = new HorizontalLayout();
-    Button cancelButton = new Button("Cancel");
-    cancelButton.addClickListener(e -> confirmDialog.close());
-    
-    Button deleteButton = new Button("Delete");
-    deleteButton.getStyle().set("background-color", "#F44336");
-    deleteButton.getStyle().set("color", "white");
-    deleteButton.addClickListener(e -> {
-        deleteWorkflowExecution(entity);
-        confirmDialog.close();
-    });
-    
-    buttons.add(cancelButton, deleteButton);
-    buttons.setJustifyContentMode(JustifyContentMode.END);
-    
-    layout.add(title, confirmation, warning, buttons);
-    confirmDialog.add(layout);
-    
-    confirmDialog.open();
-}
+        Dialog confirmDialog = new Dialog();
+        confirmDialog.setWidth("400px");
 
-@Transactional
-private void deleteWorkflowExecution(WorkflowExecutionEntity entity) {
-    try {
-        workflowExecutionService.deleteWorkflowExecution(entity.getId());
-        refreshGrid();
-        showNotification("Workflow execution deleted successfully");
-    } catch (Exception ex) {
-        showNotification("Error deleting workflow execution: " + ex.getMessage());
+        VerticalLayout layout = new VerticalLayout();
+        layout.setPadding(true);
+        layout.setSpacing(true);
+
+        H3 title = new H3("Confirm Delete");
+        Paragraph confirmation = new Paragraph("Are you sure you want to delete the workflow execution for \""
+                + entity.getUploadedFileName() + "\"?");
+        Paragraph warning = new Paragraph("This action cannot be undone.");
+        warning.getStyle().set("color", "red");
+
+        HorizontalLayout buttons = new HorizontalLayout();
+        Button cancelButton = new Button("Cancel");
+        cancelButton.addClickListener(e -> confirmDialog.close());
+
+        Button deleteButton = new Button("Delete");
+        deleteButton.getStyle().set("background-color", "#F44336");
+        deleteButton.getStyle().set("color", "white");
+        deleteButton.addClickListener(e -> {
+            deleteWorkflowExecution(entity);
+            confirmDialog.close();
+        });
+
+        buttons.add(cancelButton, deleteButton);
+        buttons.setJustifyContentMode(JustifyContentMode.END);
+
+        layout.add(title, confirmation, warning, buttons);
+        confirmDialog.add(layout);
+
+        confirmDialog.open();
     }
-}
 
-private void showNotification(String message) {
-    com.vaadin.flow.component.notification.Notification notification = 
-        com.vaadin.flow.component.notification.Notification.show(message, 3000, 
-            com.vaadin.flow.component.notification.Notification.Position.BOTTOM_START);
-}
+    @Transactional
+    private void deleteWorkflowExecution(WorkflowExecutionEntity entity) {
+        try {
+            workflowExecutionService.deleteWorkflowExecution(entity.getId());
+            refreshGrid();
+            showNotification("Workflow execution deleted successfully");
+        } catch (Exception ex) {
+            showNotification("Error deleting workflow execution: " + ex.getMessage());
+        }
+    }
+
+    private void showNotification(String message) {
+        com.vaadin.flow.component.notification.Notification notification = com.vaadin.flow.component.notification.Notification
+                .show(message, 3000,
+                        com.vaadin.flow.component.notification.Notification.Position.BOTTOM_START);
+    }
 
     private void configureFilter() {
         filter = new TextField();
@@ -243,31 +269,37 @@ private void showNotification(String message) {
         filter.addValueChangeListener(e -> applyFilter());
         filter.setWidthFull();
     }
-    
 
     private void refreshGrid() {
-        List<WorkflowExecutionEntity> executions = workflowExecutionService.getWorkflowExecutions();
+        String currentUsername = getCurrentUsername();
+        List<String> userRoles = getCurrentUserRoles();
+
+        List<WorkflowExecutionEntity> executions = workflowExecutionService
+                .getWorkflowExecutionsForUser(currentUsername, userRoles);
         grid.setItems(executions);
     }
 
     private void applyFilter() {
         String filterText = filter.getValue().trim().toLowerCase();
+        String currentUsername = getCurrentUsername();
+        List<String> userRoles = getCurrentUserRoles();
 
-        if (filterText.isEmpty()) {
-            refreshGrid();
-        } else {
-            List<WorkflowExecutionEntity> executions = workflowExecutionService.getWorkflowExecutions();
-            grid.setItems((DataProvider<WorkflowExecutionEntity, Void>) executions.stream().filter(exec ->
-                (exec.getUploadedFileName() != null &&
-                 exec.getUploadedFileName().toLowerCase().contains(filterText)) ||
-                (exec.getWorkflow() != null &&
-                 exec.getWorkflow().getName().toLowerCase().contains(filterText)) ||
-                (exec.getStatus() != null &&
-                 exec.getStatus().toLowerCase().contains(filterText))
-            ));
+        List<WorkflowExecutionEntity> executions = workflowExecutionService
+                .getWorkflowExecutionsForUser(currentUsername, userRoles);
+
+        if (!filterText.isEmpty()) {
+            executions = executions.stream().filter(exec -> (exec.getUploadedFileName() != null &&
+                    exec.getUploadedFileName().toLowerCase().contains(filterText)) ||
+                    (exec.getWorkflow() != null &&
+                            exec.getWorkflow().getName().toLowerCase().contains(filterText))
+                    ||
+                    (exec.getStatus() != null &&
+                            exec.getStatus().toLowerCase().contains(filterText)))
+                    .collect(Collectors.toList());
         }
-    }
 
+        grid.setItems(executions);
+    }
 
     private void showDetails(WorkflowExecutionEntity entity) {
         Dialog dialog = new Dialog();
@@ -318,9 +350,41 @@ private void showNotification(String message) {
         Button closeButton = new Button("Close");
         closeButton.addClickListener(e -> dialog.close());
 
-        layout.add(title, workflowName, document, documentType, status, createdAt, createdBy, decisionInfo, closeButton);
+        layout.add(title, workflowName, document, documentType, status, createdAt, createdBy, decisionInfo,
+                closeButton);
         dialog.add(layout);
 
         dialog.open();
+    }
+
+    private List<String> getCurrentUserRoles() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null) {
+            return authentication.getAuthorities().stream()
+                    .map(GrantedAuthority::getAuthority)
+                    .map(role -> role.replace("ROLE_", "")) // Remove ROLE_ prefix if present
+                    .collect(Collectors.toList());
+        }
+        return Collections.emptyList();
+    }
+
+    private String getCurrentUsername() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication
+                .getPrincipal() instanceof org.springframework.security.oauth2.core.oidc.user.OidcUser) {
+            org.springframework.security.oauth2.core.oidc.user.OidcUser oidcUser = (org.springframework.security.oauth2.core.oidc.user.OidcUser) authentication
+                    .getPrincipal();
+
+            // Try to get preferred_username from the claims
+            String preferredUsername = oidcUser.getAttribute("preferred_username");
+            if (preferredUsername != null && !preferredUsername.isEmpty()) {
+                return preferredUsername;
+            }
+        }
+
+        // Fallback to the default behavior
+        return (authentication != null && authentication.getName() != null)
+                ? authentication.getName()
+                : "anonymous";
     }
 }

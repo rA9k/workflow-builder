@@ -5,9 +5,12 @@ import com.example.workflow.model.WorkflowJsonEntity;
 import com.example.workflow.opa.WorkflowOPAService;
 import com.example.workflow.repository.WorkflowExecutionRepository;
 import com.example.workflow.repository.WorkflowJsonRepository;
+import com.example.workflow.service.WorkflowExecutionService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vaadin.flow.component.Component;
+import com.vaadin.flow.component.dependency.JsModule;
+import com.vaadin.flow.component.dependency.CssImport;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.dialog.Dialog;
@@ -23,6 +26,8 @@ import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.upload.Upload;
 import com.vaadin.flow.component.upload.receivers.MemoryBuffer;
+import com.vaadin.flow.router.BeforeEnterEvent;
+import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.BeforeEvent;
 import com.vaadin.flow.router.HasUrlParameter;
 import com.vaadin.flow.router.OptionalParameter;
@@ -34,16 +39,20 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.GrantedAuthority;
 import java.util.Collection;
-
+import java.util.Collections;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Route("workflow-use")
 @RouteAlias("workflow-use/new")
-public class WorkflowUseView extends VerticalLayout implements HasUrlParameter<Long> {
+@CssImport("./styles/responsive-workflow.css")
+@JsModule("./js/workflow-responsive.js")
+public class WorkflowUseView extends VerticalLayout implements HasUrlParameter<Long>, BeforeEnterObserver {
 
     private final WorkflowJsonRepository workflowJsonRepository;
     private final WorkflowExecutionRepository workflowExecutionRepository;
@@ -51,6 +60,10 @@ public class WorkflowUseView extends VerticalLayout implements HasUrlParameter<L
     private HorizontalLayout workflowProgress;
     private final Map<String, Object> workflowData = new HashMap<>();
     private int currentNodeIndex = 0;
+
+    // Add this field
+    @Autowired
+    private WorkflowExecutionService workflowExecutionService;
 
     private WorkflowExecutionEntity workflowExecution;
 
@@ -68,29 +81,113 @@ public class WorkflowUseView extends VerticalLayout implements HasUrlParameter<L
     private WorkflowOPAService workflowOPAService;
 
     public WorkflowUseView(WorkflowJsonRepository workflowJsonRepository,
-            WorkflowExecutionRepository workflowExecutionRepository) {
+            WorkflowExecutionRepository workflowExecutionRepository,
+            WorkflowExecutionService workflowExecutionService) {
         this.workflowJsonRepository = workflowJsonRepository;
         this.workflowExecutionRepository = workflowExecutionRepository;
+        this.workflowExecutionService = workflowExecutionService;
 
         setSizeFull();
         setSpacing(true);
         setPadding(true);
+        addClassName("responsive-workflow-use");
 
         H2 header = new H2("Workflow Execution");
         header.getStyle().set("margin-top", "0");
+        header.addClassName("responsive-header");
 
         workflowProgress = new HorizontalLayout();
         workflowProgress.setWidthFull();
+        workflowProgress.addClassName("responsive-workflow-progress");
         workflowProgress.getStyle()
                 .set("background-color", "#f5f5f5")
                 .set("padding", "1rem")
                 .set("border-radius", "4px")
-                .set("margin-bottom", "1rem");
+                .set("margin-bottom", "1rem")
+                .set("overflow-x", "auto"); // Allow horizontal scrolling on small screens
 
         Button backButton = new Button("Back to Workflows");
+        backButton.addClassName("responsive-button");
         backButton.addClickListener(e -> UI.getCurrent().navigate(WorkflowViewerView.class));
 
         add(header, backButton, workflowProgress);
+    }
+
+    @Override
+    public void beforeEnter(BeforeEnterEvent event) {
+        Long workflowId = event.getRouteParameters().getLong("id").orElse(null);
+
+        if (workflowId != null) {
+            Optional<WorkflowExecutionEntity> executionOpt = workflowExecutionRepository.findById(workflowId);
+
+            if (executionOpt.isPresent()) {
+                WorkflowExecutionEntity execution = executionOpt.get();
+                String currentUsername = getCurrentUsername();
+                List<String> userRoles = getCurrentUserRoles();
+
+                // Check if user has permission to view this workflow
+                boolean hasPermission = execution.getCreatedBy().equals(currentUsername);
+
+                if (!hasPermission) {
+                    // Check if the user has the required role for the current node
+                    try {
+                        ObjectMapper mapper = new ObjectMapper();
+                        List<Map<String, Object>> workflowNodes = mapper.readValue(
+                                execution.getWorkflow().getData(),
+                                new TypeReference<List<Map<String, Object>>>() {
+                                });
+
+                        int currentNodeIndex = execution.getCurrentNodeIndex();
+                        if (currentNodeIndex >= 0 && currentNodeIndex < workflowNodes.size()) {
+                            Map<String, Object> currentNode = workflowNodes.get(currentNodeIndex);
+                            String nodeType = (String) currentNode.get("type");
+
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> props = (Map<String, Object>) currentNode.get("props");
+
+                            if (props != null) {
+                                // For Document Review nodes
+                                if ("Document Review".equals(nodeType) || "Doc Review".equals(nodeType)) {
+                                    String reviewerRole = (String) props.get("reviewerRole");
+                                    if (reviewerRole != null && userRoles.contains(reviewerRole)) {
+                                        hasPermission = true;
+                                    }
+                                }
+                                // For Approval nodes
+                                else if ("Approve/Reject".equals(nodeType) || "Approval".equals(nodeType)) {
+                                    String approverRole = (String) props.get("Approver Role");
+                                    if (approverRole != null && userRoles.contains(approverRole)) {
+                                        hasPermission = true;
+                                    }
+                                }
+                            }
+                        }
+                    } catch (Exception e) {
+                        // Log error but don't fail the check
+                        System.err.println("Error checking workflow roles: " + e.getMessage());
+                    }
+                }
+
+                if (!hasPermission) {
+                    // Redirect to workflows list with error message
+                    UI.getCurrent().navigate(WorkflowInUseListView.class);
+                    Notification.show("You don't have permission to view this workflow",
+                            3000, Notification.Position.MIDDLE);
+                    return;
+                }
+            }
+        }
+    }
+
+    private List<String> getCurrentUserRoles() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null) {
+            return authentication.getAuthorities().stream()
+                    .map(GrantedAuthority::getAuthority)
+                    .map(role -> role.replace("ROLE_", "")) // Remove ROLE_ prefix if present
+                    .collect(Collectors.toList());
+        }
+        return Collections.emptyList();
     }
 
     @Override
@@ -194,6 +291,8 @@ public class WorkflowUseView extends VerticalLayout implements HasUrlParameter<L
 
     private void renderWorkflowSteps() {
         workflowProgress.removeAll();
+        workflowProgress.addClassName("responsive-steps-container");
+
         for (int i = 0; i < workflowNodes.size(); i++) {
             Map<String, Object> node = workflowNodes.get(i);
             String nodeName = (String) node.get("name");
@@ -202,6 +301,7 @@ public class WorkflowUseView extends VerticalLayout implements HasUrlParameter<L
             Div stepDiv = new Div();
             stepDiv.setText(nodeName);
             stepDiv.addClassName("workflow-step");
+            stepDiv.addClassName("responsive-step");
             stepDiv.getStyle()
                     .set("padding", "0.5rem 1rem")
                     .set("border-radius", "4px")
@@ -242,6 +342,18 @@ public class WorkflowUseView extends VerticalLayout implements HasUrlParameter<L
         if (currentNodeIndex >= workflowNodes.size()) {
             Paragraph complete = new Paragraph("Workflow is complete");
             complete.getStyle().set("font-size", "1.2rem");
+            if (uploadedDocument != null) {
+                Button downloadButton = new Button("Download Final Document");
+                downloadButton.getStyle().set("background-color", "#2196F3").set("color", "white");
+
+                StreamResource resource = new StreamResource(uploadedFileName,
+                        () -> new ByteArrayInputStream(uploadedDocument));
+                Anchor downloadLink = new Anchor(resource, "");
+                downloadLink.getElement().setAttribute("download", true);
+                downloadLink.add(downloadButton);
+
+                add(downloadLink);
+            }
             add(complete);
             return;
         }
@@ -253,6 +365,7 @@ public class WorkflowUseView extends VerticalLayout implements HasUrlParameter<L
         renderWorkflowSteps();
 
         Div nodeCard = new Div();
+        nodeCard.addClassName("responsive-node-card");
         nodeCard.getStyle()
                 .set("background-color", "white")
                 .set("padding", "1.5rem")
@@ -648,7 +761,9 @@ public class WorkflowUseView extends VerticalLayout implements HasUrlParameter<L
             }
             workflowExecution.setNodeStatuses(objectMapper.writeValueAsString(nodeStatuses));
             workflowExecution.setWorkflowData(objectMapper.writeValueAsString(workflowData));
-            workflowExecution = workflowExecutionRepository.save(workflowExecution);
+
+            // Use the service instead of directly accessing the repository
+            workflowExecution = workflowExecutionService.updateWorkflowExecution(workflowExecution);
         } catch (Exception e) {
             Notification.show("Error saving workflow state: " + e.getMessage());
         }

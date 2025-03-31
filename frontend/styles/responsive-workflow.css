@@ -1,0 +1,135 @@
+/* Responsive styles for workflow views */
+/* Ensure the components panel is above other elements in mobile view */
+@media (max-width: 768px) {
+    .responsive-sidebar {
+        z-index: 1000 !important;
+    }
+    
+    /* Style for the properties panel close button */
+    .properties-close-btn:hover {
+        background-color: rgba(0, 0, 0, 0.05) !important;
+    }
+    
+    /* Make sure the mobile toggle button is visible */
+    .mobile-toggle-btn {
+        z-index: 1001;
+    }
+}
+
+/* Add a subtle animation to the properties panel */
+.properties-panel {
+    transition: right 0.3s ease-in-out;
+}
+
+.properties-panel.open {
+    box-shadow: -3px 0 10px rgba(0, 0, 0, 0.1);
+}
+
+/* Base responsive layout */
+.responsive-main-container {
+    display: flex;
+    width: 100%;
+}
+
+/* Mobile toggle button - hidden on desktop */
+.mobile-header {
+    display: none;
+}
+
+.mobile-toggle-btn {
+    background-color: #2196F3;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 8px;
+    margin: 8px;
+}
+
+/* Responsive sidebar */
+.responsive-sidebar {
+    transition: transform 0.3s ease-in-out;
+}
+
+/* Responsive workflow canvas */
+.workflow-canvas {
+    transition: margin-left 0.3s ease-in-out;
+}
+
+/* Properties panel responsive behavior */
+.properties-panel {
+    transition: right 0.3s ease-in-out;
+}
+
+/* Media queries for different screen sizes */
+@media (max-width: 768px) {
+    .responsive-main-container {
+        flex-direction: column;
+    }
+    
+    .mobile-header {
+        display: block;
+        width: 100%;
+        background-color: #f8f9fa;
+        border-bottom: 1px solid #dee2e6;
+        padding: 8px;
+        z-index: 100;
+    }
+    
+    .responsive-sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 100vh;
+        width: 80%;
+        max-width: 300px;
+        z-index: 1000;
+        transform: translateX(-100%);
+        box-shadow: 2px 0 5px rgba(0,0,0,0.2);
+    }
+    
+    .responsive-sidebar.mobile-open {
+        transform: translateX(0);
+    }
+    
+    .workflow-canvas {
+        width: 100% !important;
+        margin-left: 0 !important;
+        min-width: 800px; /* Minimum width to ensure all components are visible */
+    }
+    
+    .properties-panel {
+        width: 100% !important;
+        max-width: none !important;
+    }
+    
+    .responsive-button-layout {
+        flex-direction: column;
+    }
+    
+    .responsive-button-layout > * {
+        margin: 5px 0;
+        width: 100%;
+    }
+    
+    /* Ensure the container allows horizontal scrolling */
+    .canvas-container {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch; /* For smooth scrolling on iOS */
+    }
+    
+    /* Make workflow buttons more visible on mobile */
+    .workflow-button {
+        min-width: 120px;
+        margin: 0.5rem;
+    }
+}
+/* Tablet adjustments */
+@media (min-width: 769px) and (max-width: 1024px) {
+    .responsive-sidebar {
+        width: 180px;
+    }
+    
+    .properties-panel {
+        width: 250px;
+    }
+}
