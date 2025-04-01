@@ -13,6 +13,9 @@ import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserService;
 import org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.security.config.Customizer;
 
 @Configuration
@@ -21,22 +24,28 @@ public class SecurityConfig {
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        // http.authorizeRequests(requests -> requests
-        // // .requestMatchers("/workflow-builder").hasRole("user")
-        // .anyRequest().permitAll());
+        // Create a custom request matcher for Vaadin UIDL requests
+        RequestMatcher uidlRequestMatcher = request -> request.getParameter("v-r") != null;
 
+        // Configure CSRF with Vaadin support
+        http.csrf(csrf -> csrf
+                .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+                .ignoringRequestMatchers(
+                        // Vaadin Flow internal requests
+                        new AntPathRequestMatcher("/VAADIN/**"),
+                        // Vaadin endpoint requests
+                        new AntPathRequestMatcher("/connect/**"),
+                        // Custom matcher for UIDL requests
+                        uidlRequestMatcher));
+
+        // Rest of your configuration...
         http.authorizeHttpRequests(req -> {
             req.requestMatchers("VAADIN/**", "/favicon.ico").permitAll();
-            // req.requestMatchers("workflow-creator").hasAuthority("Manager");
-            // req.requestMatchers("workflow-viewer").hasAuthority("SuperAdmin");
-        });
-
-        http.csrf(csrf -> csrf.disable());
-        http.authorizeHttpRequests(req -> {
             req.anyRequest().authenticated();
         });
+
         http.oauth2Login(Customizer.withDefaults());
-        // http.oauth2Login(Customizer.withDefaults());
+
         // Logout configuration.
         http.logout(logout -> logout
                 .addLogoutHandler((request, response, authentication) -> request.getSession().invalidate())
@@ -108,5 +117,4 @@ public class SecurityConfig {
             }
         };
     }
-
 }

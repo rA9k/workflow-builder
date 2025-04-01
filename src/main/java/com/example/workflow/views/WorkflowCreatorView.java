@@ -205,6 +205,7 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
         propertiesPanel = new VerticalLayout();
         propertiesPanel.addClassName("properties-panel");
         propertiesPanel.setWidth("300px");
+        // Update the properties panel configuration
         propertiesPanel.getStyle()
                 .set("position", "fixed")
                 .set("top", "0")
@@ -213,8 +214,9 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
                 .set("background-color", "#f8f9fa")
                 .set("padding", "1rem")
                 .set("box-shadow", "-2px 0 5px rgba(0,0,0,0.1)")
-                .set("z-index", "1000")
-                .set("transition", "right 0.3s ease-in-out");
+                .set("z-index", "3000") // Increase z-index to match overlay value
+                .set("transition", "right 0.3s ease-in-out")
+                .set("overflow-y", "auto");
 
         H3 propertiesTitle = new H3("Properties");
         propertiesTitle.getStyle().set("margin", "0 0 1rem 0");
@@ -461,9 +463,12 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
 
         // Create a header layout with title and close button
         HorizontalLayout headerLayout = new HorizontalLayout();
+        headerLayout.addClassName("header-layout"); // Add this class name
         headerLayout.setWidthFull();
         headerLayout.setJustifyContentMode(JustifyContentMode.BETWEEN);
         headerLayout.setAlignItems(Alignment.CENTER);
+        headerLayout.setPadding(false);
+        headerLayout.setSpacing(true);
 
         H3 propertiesTitle = new H3("Properties");
         propertiesTitle.getStyle().set("margin", "0");
@@ -477,10 +482,23 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
                 .set("padding", "0.5rem")
                 .set("min-width", "auto")
                 .set("border-radius", "50%")
-                .set("cursor", "pointer");
+                .set("cursor", "pointer")
+                .set("z-index", "3001");
 
         closeButton.addClickListener(e -> {
-            deselectComponent();
+            // Explicitly hide the panel
+            propertiesPanel.getClassNames().remove("open");
+            propertiesPanel.getStyle().set("right", "-300px");
+            workflowCanvas.getStyle().remove("margin-right");
+
+            // Deselect the component
+            if (selectedComponent != null) {
+                selectedComponent.getStyle()
+                        .remove("border-top")
+                        .remove("border-right")
+                        .remove("border-bottom");
+                selectedComponent = null;
+            }
         });
 
         headerLayout.add(propertiesTitle, closeButton);
@@ -672,6 +690,13 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
         styleActionButton(viewWorkflowsBtn, "#17a2b8");
         HorizontalLayout btnLayout = new HorizontalLayout(saveBtn, deleteBtn, clearAllBtn, viewWorkflowsBtn);
         btnLayout.addClassName("responsive-button-layout");
+        btnLayout.setWidthFull();
+        btnLayout.setJustifyContentMode(JustifyContentMode.CENTER);
+        btnLayout.setSpacing(true);
+        btnLayout.getStyle()
+                .set("padding", "1rem")
+                .set("flex-wrap", "wrap")
+                .set("gap", "8px"); // Add gap for better spacing in mobile view
         Button saveAsButton = new Button("Save As", e -> {
             // Create a dummy WorkflowJsonEntity for now. The data will be populated from
             // the current workflow.
@@ -719,6 +744,16 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
                 .set("padding", "1rem")
                 .set("flex-wrap", "wrap"); // Use style property instead of setFlexWrap
 
+        UI.getCurrent().getPage().executeJs(
+                "window.addEventListener('resize', function() { " +
+                        "  const btnLayout = document.querySelector('.responsive-button-layout');" +
+                        "  if (window.innerWidth <= 768) {" +
+                        "    btnLayout.style.flexDirection = 'column';" +
+                        "  } else {" +
+                        "    btnLayout.style.flexDirection = 'row';" +
+                        "  }" +
+                        "});");
+
         return btnLayout;
     }
 
@@ -761,17 +796,26 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
     }
 
     private void deselectComponent() {
-        if (editMode && selectedComponent != null) {
+        if (selectedComponent != null) {
             selectedComponent.getStyle()
                     .remove("border-top")
                     .remove("border-right")
                     .remove("border-bottom");
 
-            // Hide the panel by sliding it out
+            // Make sure we're removing the open class and setting the right style
+            propertiesPanel.getClassNames().remove("open");
             propertiesPanel.getStyle().set("right", "-300px");
             workflowCanvas.getStyle().remove("margin-right");
 
             selectedComponent = null;
+
+            // Force UI update
+            UI.getCurrent().getPage().executeJs(
+                    "const panel = document.querySelector('.properties-panel');" +
+                            "if (panel) {" +
+                            "  panel.style.right = '-300px';" +
+                            "  panel.classList.remove('open');" +
+                            "}");
         }
     }
 

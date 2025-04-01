@@ -5,9 +5,31 @@
         z-index: 1000 !important;
     }
     
-    /* Style for the properties panel close button */
+    /* Ensure the properties panel close button is visible and clickable */
+    .properties-close-btn {
+        position: relative !important;
+        z-index: 3001 !important;
+        cursor: pointer !important;
+        opacity: 1 !important;
+        transition: background-color 0.2s ease;
+    }
+    
     .properties-close-btn:hover {
         background-color: rgba(0, 0, 0, 0.05) !important;
+    }
+    
+    /* Make sure the button is visible on mobile */
+    .properties-close-btn {
+        padding: 10px !important; /* Larger touch target for mobile */
+        margin-right: 5px !important;
+    }
+    
+    /* Ensure the header layout containing the button is visible */
+    .properties-panel .header-layout {
+        display: flex !important;
+        justify-content: space-between !important;
+        width: 100% !important;
+        margin-bottom: 15px !important;
     }
     
     /* Make sure the mobile toggle button is visible */
@@ -132,4 +154,43 @@
     .properties-panel {
         width: 250px;
     }
+}
+
+/* Mobile-specific fixes */
+@media (max-width: 768px) {
+    /* Make properties panel take full width on mobile */
+    .properties-panel.open {
+        width: 100% !important;
+        max-width: 100% !important;
+        right: 0 !important;
+    }
+    
+    /* Ensure buttons stack properly */
+    .responsive-button-layout {
+        flex-direction: column !important;
+    }
+    
+    .responsive-button-layout > * {
+        margin: 5px 0 !important;
+        width: 100% !important;
+    }
+    
+    /* Fix z-index for mobile sidebar */
+    .responsive-sidebar {
+        z-index: 3000 !important;
+    }
+    
+    /* Ensure the canvas is scrollable horizontally */
+    .canvas-container {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch; /* For smooth scrolling on iOS */
+    }
+}
+
+/* Fix for Vaadin overlay components */
+vaadin-combo-box-overlay,
+vaadin-select-overlay,
+vaadin-dialog-overlay,
+vaadin-overlay {
+    z-index: 3500 !important;
 }

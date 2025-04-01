@@ -5,6 +5,8 @@ const urlsToCache = [
   '/',
   '/offline.html',
   '/styles/wave-styles.css',
+  '/styles/responsive-workflow.css',
+  '/js/workflow-responsive.js',
   '/images/logo.png'
 ];
 
