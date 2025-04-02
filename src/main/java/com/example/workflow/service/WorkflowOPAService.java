@@ -1,4 +1,4 @@
-package com.example.workflow.opa;
+package com.example.workflow.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.beans.factory.annotation.Value;

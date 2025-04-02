@@ -26,7 +26,7 @@ public class WorkflowViewerView extends VerticalLayout {
     private final Grid<WorkflowJsonEntity> workflowGrid = new Grid<>(WorkflowJsonEntity.class);
 
     public WorkflowViewerView(WorkflowJsonRepository workflowJsonRepository,
-                              WorkflowExecutionRepository workflowExecutionRepository) {
+            WorkflowExecutionRepository workflowExecutionRepository) {
         this.workflowJsonRepository = workflowJsonRepository;
         this.workflowExecutionRepository = workflowExecutionRepository;
 
@@ -44,9 +44,7 @@ public class WorkflowViewerView extends VerticalLayout {
         // Create Workflow button styled as primary action
         Button createWorkflowButton = new Button("Create Workflow");
         createWorkflowButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-        createWorkflowButton.addClickListener(e ->
-                getUI().ifPresent(ui -> ui.navigate(WorkflowCreatorView.class))
-        );
+        createWorkflowButton.addClickListener(e -> getUI().ifPresent(ui -> ui.navigate(WorkflowCreatorView.class)));
 
         // Toolbar layout for top actions
         HorizontalLayout toolbar = new HorizontalLayout(createWorkflowButton);
@@ -77,9 +75,8 @@ public class WorkflowViewerView extends VerticalLayout {
             // View/Edit button
             Button viewEditButton = new Button("View/Edit");
             viewEditButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
-            viewEditButton.addClickListener(e ->
-                    getUI().ifPresent(ui -> ui.navigate(WorkflowCreatorView.class, entity.getId()))
-            );
+            viewEditButton.addClickListener(
+                    e -> getUI().ifPresent(ui -> ui.navigate(WorkflowCreatorView.class, entity.getId())));
 
             // Delete button
             Button deleteButton = new Button("Delete");
@@ -91,7 +88,7 @@ public class WorkflowViewerView extends VerticalLayout {
             actions.setSpacing(true);
             return actions;
         }).setHeader("Actions")
-          .setAutoWidth(true);
+                .setAutoWidth(true);
 
         // Use button column – creates a new execution instance every time.
         // Notice the navigation now uses the route alias "workflow-use/new"
@@ -99,33 +96,20 @@ public class WorkflowViewerView extends VerticalLayout {
             Button useButton = new Button("Use");
             useButton.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
             useButton.addClickListener(e -> {
-    // Navigate to the new execution route. 
-    // Make sure that 'entity' here is a WorkflowJsonEntity.
-    getUI().ifPresent(ui -> ui.getPage().setLocation("workflow-use/new/" + entity.getId()));
-    Notification.show("New workflow instance created. " +
-        "If previously uploaded files have expired, please re-upload them.");
-});
+                // Navigate to the new execution route.
+                // Make sure that 'entity' here is a WorkflowJsonEntity.
+                getUI().ifPresent(ui -> ui.getPage().setLocation("workflow-use/new/" + entity.getId()));
+                Notification.show("New workflow instance created. " +
+                        "If previously uploaded files have expired, please re-upload them.");
+            });
 
             return useButton;
         }).setHeader("")
-          .setAutoWidth(true);
+                .setAutoWidth(true);
 
         // Apply modern grid themes
         workflowGrid.addThemeVariants(GridVariant.LUMO_NO_BORDER, GridVariant.LUMO_ROW_STRIPES);
         workflowGrid.setHeightFull();
-    }
-
-    /**
-     * Creates a new workflow execution instance for the selected workflow.
-     * This method is now used solely when deleting or for other operations if needed.
-     * The "Use" button now navigates via the new route alias.
-     */
-    private WorkflowExecutionEntity createNewWorkflowExecution(WorkflowJsonEntity workflowEntity) {
-        WorkflowExecutionEntity executionEntity = new WorkflowExecutionEntity();
-        executionEntity.setWorkflow(workflowEntity);
-        executionEntity.setStatus("NEW");
-        // Set any other required properties for a new execution
-        return workflowExecutionRepository.save(executionEntity);
     }
 
     private void loadWorkflows() {

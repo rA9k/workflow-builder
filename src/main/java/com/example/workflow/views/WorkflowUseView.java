@@ -2,10 +2,10 @@ package com.example.workflow.views;
 
 import com.example.workflow.model.WorkflowExecutionEntity;
 import com.example.workflow.model.WorkflowJsonEntity;
-import com.example.workflow.opa.WorkflowOPAService;
 import com.example.workflow.repository.WorkflowExecutionRepository;
 import com.example.workflow.repository.WorkflowJsonRepository;
 import com.example.workflow.service.WorkflowExecutionService;
+import com.example.workflow.service.WorkflowOPAService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vaadin.flow.component.Component;

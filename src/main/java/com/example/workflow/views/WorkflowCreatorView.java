@@ -1,8 +1,8 @@
 package com.example.workflow.views;
 
 import com.example.workflow.model.WorkflowJsonEntity;
-import com.example.workflow.opa.WorkflowOPAService;
 import com.example.workflow.repository.WorkflowJsonRepository;
+import com.example.workflow.service.WorkflowOPAService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.dependency.JsModule;
@@ -416,6 +416,7 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
         return btn;
     }
 
+    // Replace the existing createWorkflowButton method with this implementation
     private Button createWorkflowButton(String label) {
         Button btn = createDraggableButton(label, false);
 
@@ -424,21 +425,169 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
                 return;
             }
 
+            // First, visually deselect the previous component if there was one
             if (selectedComponent != null && selectedComponent != btn) {
-                deselectComponent();
+                selectedComponent.getStyle()
+                        .remove("border-top")
+                        .remove("border-right")
+                        .remove("border-bottom");
             }
+
+            // Set the new selected component
             selectedComponent = btn;
+
+            // Apply selection styling
             btn.getStyle()
                     .set("border-top", "2px solid #1a73e8")
                     .set("border-right", "2px solid #1a73e8")
                     .set("border-bottom", "2px solid #1a73e8");
-            showPropertiesPanel(btn);
+
+            // Force the properties panel to be visible and populated
+            propertiesPanel.removeAll();
+
+            // Add the properties content (reuse the same code from showPropertiesPanel)
+            HorizontalLayout headerLayout = new HorizontalLayout();
+            headerLayout.addClassName("header-layout");
+            headerLayout.setWidthFull();
+            headerLayout.setJustifyContentMode(JustifyContentMode.BETWEEN);
+            headerLayout.setAlignItems(Alignment.CENTER);
+            headerLayout.setPadding(false);
+            headerLayout.setSpacing(true);
+
+            H3 propertiesTitle = new H3("Properties");
+            propertiesTitle.getStyle().set("margin", "0");
+
+            Button closeButton = new Button(new Icon(VaadinIcon.CLOSE));
+            closeButton.addClassName("properties-close-btn");
+            closeButton.getStyle()
+                    .set("background", "transparent")
+                    .set("color", "#666")
+                    .set("padding", "0.5rem")
+                    .set("min-width", "auto")
+                    .set("border-radius", "50%")
+                    .set("cursor", "pointer")
+                    .set("z-index", "3001");
+
+            // Update the closeButton click listener in the createWorkflowButton method:
+
+            closeButton.addClickListener(e -> {
+                // Use JavaScript to ensure the panel is properly hidden in all views
+                UI.getCurrent().getPage().executeJs(
+                        "const panel = document.querySelector('.properties-panel');" +
+                                "if (panel) {" +
+                                "  panel.style.right = '-300px';" +
+                                "  panel.style.visibility = 'hidden';" +
+                                "  document.querySelector('.workflow-canvas').style.removeProperty('margin-right');" +
+                                "}");
+
+                // Also update the Java-side styles
+                propertiesPanel.getStyle().set("right", "-300px");
+                propertiesPanel.getStyle().set("visibility", "hidden");
+                workflowCanvas.getStyle().remove("margin-right");
+
+                // Deselect the component
+                if (selectedComponent != null) {
+                    selectedComponent.getStyle()
+                            .remove("border-top")
+                            .remove("border-right")
+                            .remove("border-bottom");
+                    selectedComponent = null;
+                }
+            });
+
+            headerLayout.add(propertiesTitle, closeButton);
+            propertiesPanel.add(headerLayout);
+
+            final WorkflowNodeProperties props = nodeProperties.computeIfAbsent(btn, k -> {
+                WorkflowNodeProperties newProps = new WorkflowNodeProperties();
+                newProps.name = btn.getText();
+                newProps.type = btn.getText();
+                newProps.description = "";
+                return newProps;
+            });
+
+            // Add all the property fields
+            TextField nameField = new TextField("Name");
+            nameField.setValue(props.name);
+            nameField.setWidthFull();
+            nameField.addValueChangeListener(e -> {
+                props.name = e.getValue();
+                btn.setText(e.getValue());
+                updateConnectors();
+            });
+
+            // Add the type-specific fields
+            if ("Upload".equals(props.type)) {
+                com.vaadin.flow.component.select.Select<String> typeSelectLocal = new com.vaadin.flow.component.select.Select<>();
+                typeSelectLocal.setLabel("Document Type");
+                typeSelectLocal.setItems("Invoice", "Onboarding", "Report", "Other");
+                typeSelectLocal.setWidthFull();
+
+                String defaultDocType = props.additionalProperties.getOrDefault("documentType", "Invoice");
+                props.additionalProperties.put("documentType", defaultDocType);
+                typeSelectLocal.setValue(defaultDocType);
+                typeSelectLocal.addValueChangeListener(e -> {
+                    props.additionalProperties.put("documentType", e.getValue());
+                });
+                propertiesPanel.add(typeSelectLocal);
+            } else if ("Document Review".equals(props.type)) {
+                com.vaadin.flow.component.select.Select<String> deptSelectLocal = new com.vaadin.flow.component.select.Select<>();
+                deptSelectLocal.setLabel("Department");
+                deptSelectLocal.setItems("HR", "Finance", "Legal", "Operations", "IT");
+                deptSelectLocal.setWidthFull();
+
+                String defaultDept = props.additionalProperties.getOrDefault("department", "HR");
+                props.additionalProperties.put("department", defaultDept);
+                deptSelectLocal.setValue(defaultDept);
+                deptSelectLocal.addValueChangeListener(e -> {
+                    props.additionalProperties.put("department", e.getValue());
+                });
+                propertiesPanel.add(deptSelectLocal);
+            } else if ("Custom Field".equals(props.type)) {
+                TextField labelField = new TextField("Label");
+                labelField.setValue(props.additionalProperties.getOrDefault("label", ""));
+                labelField.setWidthFull();
+                labelField.addValueChangeListener(e -> props.additionalProperties.put("label", e.getValue()));
+
+                TextField valueField = new TextField("Value");
+                valueField.setValue(props.additionalProperties.getOrDefault("value", ""));
+                valueField.setWidthFull();
+                valueField.addValueChangeListener(e -> props.additionalProperties.put("value", e.getValue()));
+
+                propertiesPanel.add(labelField, valueField);
+            }
+
+            TextField descriptionField = new TextField("Description");
+            descriptionField.setValue(props.description);
+            descriptionField.setWidthFull();
+            descriptionField.addValueChangeListener(e -> props.description = e.getValue());
+
+            VerticalLayout typeSpecificFields = new VerticalLayout();
+            typeSpecificFields.setPadding(false);
+            addTypeSpecificFields(typeSpecificFields, props);
+
+            propertiesPanel.add(nameField, descriptionField, typeSpecificFields);
+
+            // Explicitly show the panel with direct style manipulation
+            propertiesPanel.getStyle().set("right", "0");
+            propertiesPanel.getStyle().set("visibility", "visible");
+            propertiesPanel.getStyle().set("display", "flex");
+            workflowCanvas.getStyle().set("margin-right", "300px");
+
+            // Force UI update with JavaScript
+            UI.getCurrent().getPage().executeJs(
+                    "const panel = document.querySelector('.properties-panel');" +
+                            "if (panel) {" +
+                            "  panel.style.right = '0';" +
+                            "  panel.style.visibility = 'visible';" +
+                            "  panel.style.display = 'flex';" +
+                            "}");
         });
 
         DropTarget<Button> drop = DropTarget.create(btn);
         drop.addDropListener(e -> {
             if (!editMode) {
-                return; // Ignore drops when not in edit mode
+                return;
             }
 
             Optional<Component> dragged = e.getDragSourceComponent();
@@ -454,6 +603,7 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
 
         return btn;
     }
+
     // ========== Properties Panel ==========
 
     private void showPropertiesPanel(Component component) {
@@ -463,7 +613,7 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
 
         // Create a header layout with title and close button
         HorizontalLayout headerLayout = new HorizontalLayout();
-        headerLayout.addClassName("header-layout"); // Add this class name
+        headerLayout.addClassName("header-layout");
         headerLayout.setWidthFull();
         headerLayout.setJustifyContentMode(JustifyContentMode.BETWEEN);
         headerLayout.setAlignItems(Alignment.CENTER);
@@ -795,28 +945,37 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
         }
     }
 
-    private void deselectComponent() {
+    // Modify the deselectComponent method to accept a parameter indicating whether
+    // to hide the properties panel
+    private void deselectComponent(boolean hidePropertiesPanel) {
         if (selectedComponent != null) {
             selectedComponent.getStyle()
                     .remove("border-top")
                     .remove("border-right")
                     .remove("border-bottom");
 
-            // Make sure we're removing the open class and setting the right style
-            propertiesPanel.getClassNames().remove("open");
-            propertiesPanel.getStyle().set("right", "-300px");
-            workflowCanvas.getStyle().remove("margin-right");
+            // Only hide the properties panel if explicitly requested
+            if (hidePropertiesPanel) {
+                propertiesPanel.getClassNames().remove("open");
+                propertiesPanel.getStyle().set("right", "-300px");
+                workflowCanvas.getStyle().remove("margin-right");
+
+                // Force UI update
+                UI.getCurrent().getPage().executeJs(
+                        "const panel = document.querySelector('.properties-panel');" +
+                                "if (panel) {" +
+                                "  panel.style.right = '-300px';" +
+                                "  panel.classList.remove('open');" +
+                                "}");
+            }
 
             selectedComponent = null;
-
-            // Force UI update
-            UI.getCurrent().getPage().executeJs(
-                    "const panel = document.querySelector('.properties-panel');" +
-                            "if (panel) {" +
-                            "  panel.style.right = '-300px';" +
-                            "  panel.classList.remove('open');" +
-                            "}");
         }
+    }
+
+    // Add an overloaded method for backward compatibility
+    private void deselectComponent() {
+        deselectComponent(true);
     }
 
     private void showSaveDialog(String jsonData) {
