@@ -5,6 +5,7 @@ import java.util.Map;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -22,10 +23,22 @@ import org.springframework.security.config.Customizer;
 @EnableWebSecurity
 public class SecurityConfig {
 
+    private final Environment env;
+
+    // Constructor injection
+    public SecurityConfig(Environment env) {
+        this.env = env;
+    }
+
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         // Create a custom request matcher for Vaadin UIDL requests
         RequestMatcher uidlRequestMatcher = request -> request.getParameter("v-r") != null;
+
+        // Get environment variables using the injected Environment
+        String keycloakBaseUrl = env.getProperty("KEYCLOAK_BASE_URL");
+        String keycloakRealm = env.getProperty("KEYCLOAK_REALM");
+        String serverPort = env.getProperty("server.port");
 
         // Configure CSRF with Vaadin support
         http.csrf(csrf -> csrf
@@ -55,16 +68,17 @@ public class SecurityConfig {
                         // Check if the token is still valid
                         if (oidcUser.getIdToken().getExpiresAt().isAfter(java.time.Instant.now())) {
                             String idToken = oidcUser.getIdToken().getTokenValue();
-                            String logoutUrl = "http://localhost:8080/realms/test/protocol/openid-connect/logout"
-                                    + "?id_token_hint=" + idToken
-                                    + "&post_logout_redirect_uri=http://localhost:8081";
-                            response.sendRedirect(logoutUrl);
+
+                            response.sendRedirect(
+                                    keycloakBaseUrl + "/realms/" + keycloakRealm + "/protocol/openid-connect/logout"
+                                            + "?id_token_hint=" + idToken
+                                            + "&post_logout_redirect_uri=http://localhost:" + serverPort);
                         } else {
                             // If the token is expired, redirect without the id_token_hint
-                            response.sendRedirect("http://localhost:8081");
+                            response.sendRedirect("http://localhost:" + serverPort);
                         }
                     } else {
-                        response.sendRedirect("http://localhost:8081");
+                        response.sendRedirect("http://localhost:" + serverPort);
                     }
                 }));
 
