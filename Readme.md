@@ -33,13 +33,15 @@ Finally go to Clients tab from left side navigation menu, open your client and c
 
 Create an `.env` File in the root directory of the project. and set values according to your environment.
 
-KEYCLOAK_CLIENT=client-id  
-KEYCLOAK_CLIENT_SECRET=client-secret  
+KEYCLOAK_CLIENT=KEYCLOAK_CLIENT_ID  
+KEYCLOAK_CLIENT_SECRET=KEYCLOAK_CLIENT_SECRET  
+KEYCLOAK_REALM=KEYCLOAK_REALM_NAME  
+
 KEYCLOAK_BASE_URL=http://localhost:8080  
-KEYCLOAK_REALM=realm-name  
 OPA_URL=http://localhost:8181  
-POSTGRESQL_HOST=jdbc:postgresql://localhost:5432/db_name  
-POSTGRESQL_USER=postgres-username  
-POSTGRESQL_PASSWORD=postgres-password  
+
+POSTGRESQL_HOST=jdbc:postgresql://localhost:5432/DB_NAME  
+POSTGRESQL_USER=PGADMIN_USERNAME  
+POSTGRESQL_PASSWORD=PGADMIN_PASSWORD  
 
 These variables are used in `src/main/resources/application.properties` and `src/main/java/com/example/workflow/config/SecurityConfig.java` file.  

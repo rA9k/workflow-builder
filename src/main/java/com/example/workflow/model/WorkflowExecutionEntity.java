@@ -1,7 +1,11 @@
 package com.example.workflow.model;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
 
 @Entity
 @Table(name = "workflow_executions")
@@ -15,42 +19,34 @@ public class WorkflowExecutionEntity {
     @JoinColumn(name = "workflow_id")
     private WorkflowJsonEntity workflow;
 
-    @Column(name = "current_node_index")
-    private Integer currentNodeIndex;
+    private int currentNodeIndex;
 
-    @Column(name = "status")
     private String status;
 
-    @Column(name = "uploaded_file_name")
-    private String uploadedFileName;
-
-    @Lob
-    @Column(name = "uploaded_document")
+    @Column(name = "uploaded_document", columnDefinition = "bytea")
     private byte[] uploadedDocument;
 
-    @Column(name = "mime_type")
+    private String uploadedFileName;
+
     private String mimeType;
 
-    @Column(name = "document_type")
-    private String documentType;
+    @Column(name = "node_statuses", columnDefinition = "text")
+    private String nodeStatuses;
 
-    @Lob
-    @Column(name = "workflow_data")
+    @Column(name = "workflow_data", columnDefinition = "text")
     private String workflowData;
 
-    @Column(name = "review_decision")
     private String reviewDecision;
 
-    @Lob
-    @Column(name = "review_notes")
+    @Column(columnDefinition = "text")
     private String reviewNotes;
 
-    @Column(name = "approval_decision")
     private String approvalDecision;
 
-    @Lob
-    @Column(name = "approval_notes")
+    @Column(columnDefinition = "text")
     private String approvalNotes;
+
+    private String createdBy;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
@@ -58,24 +54,15 @@ public class WorkflowExecutionEntity {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    @Column(name = "created_by")
-    private String createdBy;
-
-    @Column(name = "node_statuses")
-    private String nodeStatuses;
-
-    @Column(name = "current_node_type")
-    private String currentNodeType;
-
-    @Column(name = "required_role")
-    private String requiredRole;
-
-    // Constructors
-    public WorkflowExecutionEntity() {
+    @PrePersist
+    public void prePersist() {
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
-        this.status = "In Progress";
-        this.currentNodeIndex = 0;
+    }
+
+    @PreUpdate
+    public void preUpdate() {
+        this.updatedAt = LocalDateTime.now();
     }
 
     // Getters and setters
@@ -95,11 +82,11 @@ public class WorkflowExecutionEntity {
         this.workflow = workflow;
     }
 
-    public Integer getCurrentNodeIndex() {
+    public int getCurrentNodeIndex() {
         return currentNodeIndex;
     }
 
-    public void setCurrentNodeIndex(Integer currentNodeIndex) {
+    public void setCurrentNodeIndex(int currentNodeIndex) {
         this.currentNodeIndex = currentNodeIndex;
     }
 
@@ -111,20 +98,20 @@ public class WorkflowExecutionEntity {
         this.status = status;
     }
 
-    public String getUploadedFileName() {
-        return uploadedFileName;
-    }
-
-    public void setUploadedFileName(String uploadedFileName) {
-        this.uploadedFileName = uploadedFileName;
-    }
-
     public byte[] getUploadedDocument() {
         return uploadedDocument;
     }
 
     public void setUploadedDocument(byte[] uploadedDocument) {
         this.uploadedDocument = uploadedDocument;
+    }
+
+    public String getUploadedFileName() {
+        return uploadedFileName;
+    }
+
+    public void setUploadedFileName(String uploadedFileName) {
+        this.uploadedFileName = uploadedFileName;
     }
 
     public String getMimeType() {
@@ -135,12 +122,12 @@ public class WorkflowExecutionEntity {
         this.mimeType = mimeType;
     }
 
-    public String getDocumentType() {
-        return documentType;
+    public String getNodeStatuses() {
+        return nodeStatuses;
     }
 
-    public void setDocumentType(String documentType) {
-        this.documentType = documentType;
+    public void setNodeStatuses(String nodeStatuses) {
+        this.nodeStatuses = nodeStatuses;
     }
 
     public String getWorkflowData() {
@@ -183,6 +170,14 @@ public class WorkflowExecutionEntity {
         this.approvalNotes = approvalNotes;
     }
 
+    public String getCreatedBy() {
+        return createdBy;
+    }
+
+    public void setCreatedBy(String createdBy) {
+        this.createdBy = createdBy;
+    }
+
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
@@ -199,21 +194,54 @@ public class WorkflowExecutionEntity {
         this.updatedAt = updatedAt;
     }
 
-    public String getCreatedBy() {
-        return createdBy;
+    // Helper methods for working with JSON data
+
+    /**
+     * Get node statuses as a map
+     */
+    public Map<String, String> getNodeStatusesAsMap() {
+        if (nodeStatuses == null || nodeStatuses.isEmpty()) {
+            return new HashMap<>();
+        }
+
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            return mapper.readValue(nodeStatuses, new TypeReference<Map<String, String>>() {
+            });
+        } catch (Exception e) {
+            return new HashMap<>();
+        }
     }
 
-    public void setCreatedBy(String createdBy) {
-        this.createdBy = createdBy;
+    /**
+     * Get workflow data as a map
+     */
+    public Map<String, Object> getWorkflowDataAsMap() {
+        if (workflowData == null || workflowData.isEmpty()) {
+            return new HashMap<>();
+        }
+
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            return mapper.readValue(workflowData, new TypeReference<Map<String, Object>>() {
+            });
+        } catch (Exception e) {
+            return new HashMap<>();
+        }
     }
 
-    public String getNodeStatuses() {
-        return nodeStatuses;
+    private String documentType;
+
+    public String getDocumentType() {
+        return documentType;
     }
 
-    public void setNodeStatuses(String nodeStatuses) {
-        this.nodeStatuses = nodeStatuses;
+    public void setDocumentType(String documentType) {
+        this.documentType = documentType;
     }
+
+    private String currentNodeType;
+    private String requiredRole;
 
     public String getCurrentNodeType() {
         return currentNodeType;
@@ -229,10 +257,5 @@ public class WorkflowExecutionEntity {
 
     public void setRequiredRole(String requiredRole) {
         this.requiredRole = requiredRole;
-    }
-
-    @PreUpdate
-    public void preUpdate() {
-        this.updatedAt = LocalDateTime.now();
     }
 }

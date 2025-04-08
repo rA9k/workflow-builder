@@ -1,196 +1,258 @@
-/* Responsive styles for workflow views */
-/* Ensure the components panel is above other elements in mobile view */
-@media (max-width: 768px) {
-    .responsive-sidebar {
-        z-index: 1000 !important;
-    }
-    
-    /* Ensure the properties panel close button is visible and clickable */
-    .properties-close-btn {
-        position: relative !important;
-        z-index: 3001 !important;
-        cursor: pointer !important;
-        opacity: 1 !important;
-        transition: background-color 0.2s ease;
-    }
-    
-    .properties-close-btn:hover {
-        background-color: rgba(0, 0, 0, 0.05) !important;
-    }
-    
-    /* Make sure the button is visible on mobile */
-    .properties-close-btn {
-        padding: 10px !important; /* Larger touch target for mobile */
-        margin-right: 5px !important;
-    }
-    
-    /* Ensure the header layout containing the button is visible */
-    .properties-panel .header-layout {
-        display: flex !important;
-        justify-content: space-between !important;
-        width: 100% !important;
-        margin-bottom: 15px !important;
-    }
-    
-    /* Make sure the mobile toggle button is visible */
-    .mobile-toggle-btn {
-        z-index: 1001;
-    }
+/* Base styles */
+:root {
+    --primary-color: #1a73e8;
+    --secondary-color: #4CAF50;
+    --warning-color: #FFC107;
+    --danger-color: #F44336;
+    --info-color: #2196F3;
+    --light-gray: #f5f5f5;
+    --border-color: #dee2e6;
+    --text-color: #333;
+    --shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-/* Add a subtle animation to the properties panel */
-.properties-panel {
-    transition: right 0.3s ease-in-out;
+.responsive-workflow-use {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1rem;
 }
 
-.properties-panel.open {
-    box-shadow: -3px 0 10px rgba(0, 0, 0, 0.1);
-}
-
-/* Base responsive layout */
-.responsive-main-container {
+/* Workflow execution container */
+.workflow-execution-container {
     display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
     width: 100%;
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+    padding: 1.5rem;
 }
 
-/* Mobile toggle button - hidden on desktop */
-.mobile-header {
-    display: none;
+/* Header styles */
+.workflow-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 1rem;
 }
 
-.mobile-toggle-btn {
-    background-color: #2196F3;
-    color: white;
-    border: none;
+.workflow-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--text-color);
+    margin: 0;
+}
+
+/* Progress indicator */
+.workflow-progress-container {
+    margin: 1.5rem 0;
+    position: relative;
+}
+
+.workflow-progress-bar {
+    height: 4px;
+    background-color: var(--light-gray);
     border-radius: 4px;
-    padding: 8px;
-    margin: 8px;
+    overflow: hidden;
+    position: relative;
 }
 
-/* Responsive sidebar */
-.responsive-sidebar {
-    transition: transform 0.3s ease-in-out;
+.workflow-progress-fill {
+    height: 100%;
+    background-color: var(--primary-color);
+    transition: width 0.3s ease;
 }
 
-/* Responsive workflow canvas */
-.workflow-canvas {
-    transition: margin-left 0.3s ease-in-out;
+.workflow-stages {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.5rem;
+    position: relative;
 }
 
-/* Properties panel responsive behavior */
-.properties-panel {
-    transition: right 0.3s ease-in-out;
+.workflow-stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    flex: 1;
 }
 
-/* Media queries for different screen sizes */
+.stage-indicator {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background-color: var(--light-gray);
+    border: 2px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 0.5rem;
+    z-index: 2;
+    transition: all 0.3s ease;
+}
+
+.stage-indicator.active {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+    color: white;
+}
+
+.stage-indicator.completed {
+    background-color: var(--secondary-color);
+    border-color: var(--secondary-color);
+    color: white;
+}
+
+.stage-label {
+    font-size: 0.8rem;
+    text-align: center;
+    color: var(--text-color);
+    max-width: 100px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Node components */
+.workflow-node {
+    padding: 1.5rem;
+    border-radius: 8px;
+    background-color: white;
+    box-shadow: var(--shadow);
+    margin-bottom: 1.5rem;
+    border-left: 4px solid var(--primary-color);
+}
+
+.upload-node {
+    border-left-color: var(--secondary-color);
+}
+
+.review-node {
+    border-left-color: var(--info-color);
+}
+
+.approval-node {
+    border-left-color: var(--warning-color);
+}
+
+.node-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.node-title {
+    font-size: 1.2rem;
+    font-weight: 500;
+    margin: 0;
+}
+
+.node-status {
+    font-size: 0.8rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    background-color: var(--light-gray);
+}
+
+.node-status.completed {
+    background-color: var(--secondary-color);
+    color: white;
+}
+
+.node-status.pending {
+    background-color: var(--light-gray);
+    color: var(--text-color);
+}
+
+.node-status.returned {
+    background-color: var(--warning-color);
+    color: white;
+}
+
+.node-status.rejected {
+    background-color: var(--danger-color);
+    color: white;
+}
+
+/* Form elements */
+.form-field {
+    margin-bottom: 1rem;
+}
+
+.form-field label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+}
+
+/* Notification panels */
+.notification-panel {
+    padding: 1rem;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+}
+
+.notification-panel.warning {
+    background-color: #FFF3CD;
+    border-left: 4px solid var(--warning-color);
+    color: #856404;
+}
+
+.notification-panel.danger {
+    background-color: #F8D7DA;
+    border-left: 4px solid var(--danger-color);
+    color: #721C24;
+}
+
+.notification-panel.info {
+    background-color: #E1F5FE;
+    border-left: 4px solid var(--info-color);
+    color: #0c5460;
+}
+
+/* Document viewer */
+.document-viewer-dialog {
+    width: 90%;
+    max-width: 1000px;
+    height: 80vh;
+}
+
+/* Responsive adjustments */
 @media (max-width: 768px) {
-    .responsive-main-container {
-        flex-direction: column;
+    .workflow-stages {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 1rem;
     }
-    
-    .mobile-header {
-        display: block;
-        width: 100%;
-        background-color: #f8f9fa;
-        border-bottom: 1px solid #dee2e6;
-        padding: 8px;
-        z-index: 100;
+  
+    .workflow-stage {
+      flex-direction: row;
+      align-items: center;
+      gap: 0.5rem;
     }
-    
-    .responsive-sidebar {
-        position: fixed;
-        top: 0;
-        left: 0;
-        height: 100vh;
-        width: 80%;
-        max-width: 300px;
-        z-index: 1000;
-        transform: translateX(-100%);
-        box-shadow: 2px 0 5px rgba(0,0,0,0.2);
+  
+    .stage-label {
+      max-width: none;
     }
-    
-    .responsive-sidebar.mobile-open {
-        transform: translateX(0);
+  
+    .workflow-progress-bar {
+      height: 100%;
+      width: 4px;
+      position: absolute;
+      left: 12px;
+      top: 0;
+      bottom: 0;
     }
-    
-    .workflow-canvas {
-        width: 100% !important;
-        margin-left: 0 !important;
-        min-width: 800px; /* Minimum width to ensure all components are visible */
+  
+    .workflow-progress-fill {
+      width: 100%;
+      height: var(--progress-height);
     }
-    
-    .properties-panel {
-        width: 100% !important;
-        max-width: none !important;
-    }
-    
-    .responsive-button-layout {
-        flex-direction: column;
-    }
-    
-    .responsive-button-layout > * {
-        margin: 5px 0;
-        width: 100%;
-    }
-    
-    /* Ensure the container allows horizontal scrolling */
-    .canvas-container {
-        overflow-x: auto !important;
-        -webkit-overflow-scrolling: touch; /* For smooth scrolling on iOS */
-    }
-    
-    /* Make workflow buttons more visible on mobile */
-    .workflow-button {
-        min-width: 120px;
-        margin: 0.5rem;
-    }
-}
-/* Tablet adjustments */
-@media (min-width: 769px) and (max-width: 1024px) {
-    .responsive-sidebar {
-        width: 180px;
-    }
-    
-    .properties-panel {
-        width: 250px;
-    }
-}
-
-/* Mobile-specific fixes */
-@media (max-width: 768px) {
-    /* Make properties panel take full width on mobile */
-    .properties-panel.open {
-        width: 100% !important;
-        max-width: 100% !important;
-        right: 0 !important;
-    }
-    
-    /* Ensure buttons stack properly */
-    .responsive-button-layout {
-        flex-direction: column !important;
-    }
-    
-    .responsive-button-layout > * {
-        margin: 5px 0 !important;
-        width: 100% !important;
-    }
-    
-    /* Fix z-index for mobile sidebar */
-    .responsive-sidebar {
-        z-index: 3000 !important;
-    }
-    
-    /* Ensure the canvas is scrollable horizontally */
-    .canvas-container {
-        overflow-x: auto !important;
-        -webkit-overflow-scrolling: touch; /* For smooth scrolling on iOS */
-    }
-}
-
-/* Fix for Vaadin overlay components */
-vaadin-combo-box-overlay,
-vaadin-select-overlay,
-vaadin-dialog-overlay,
-vaadin-overlay {
-    z-index: 3500 !important;
 }
