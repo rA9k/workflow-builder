@@ -15,7 +15,6 @@ import com.vaadin.flow.component.orderedlayout.FlexComponent.JustifyContentMode;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.TextArea;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 
@@ -74,7 +73,6 @@ public class ApprovalNode extends WorkflowNode {
 
         // Get necessary context data
         Long workflowId = (Long) executionContext.get("workflowId");
-        Long executionId = (Long) executionContext.get("executionId");
         byte[] uploadedDocument = (byte[]) executionContext.get("uploadedDocument");
         String uploadedFileName = (String) executionContext.get("uploadedFileName");
 
@@ -194,6 +192,10 @@ public class ApprovalNode extends WorkflowNode {
                 .set("background-color", "var(--secondary-color)")
                 .set("color", "white");
         approveButton.addClickListener(e -> {
+            // Disable both buttons immediately to prevent double-clicks
+            rejectButton.setEnabled(false);
+            approveButton.setEnabled(false);
+
             workflowData.put("approvalNotes", approvalNotes.getValue());
             workflowData.put("approvalDecision", "Approved");
             this.status = "Completed";
@@ -205,10 +207,6 @@ public class ApprovalNode extends WorkflowNode {
 
             executionContext.put("workflowStatus", "Completed");
             executionContext.put("advanceWorkflow", true);
-
-            // Disable buttons after action
-            rejectButton.setEnabled(false);
-            approveButton.setEnabled(false);
 
             Notification.show("Document approved successfully",
                     3000, Notification.Position.BOTTOM_END);
@@ -223,6 +221,7 @@ public class ApprovalNode extends WorkflowNode {
                 .set("background-color", "var(--danger-color)")
                 .set("color", "white");
         rejectButton.addClickListener(e -> {
+            // Don't disable buttons yet since we need to validate first
             if (approvalNotes.getValue().trim().isEmpty()) {
                 Notification.show("Please provide rejection notes",
                         3000, Notification.Position.BOTTOM_CENTER);
@@ -257,12 +256,20 @@ public class ApprovalNode extends WorkflowNode {
                     .set("background-color", "var(--light-gray)");
             cancelButton.addClickListener(event -> confirmDialog.close());
 
-            // In the Confirm Reject button click handler
+            // Modify the Confirm Reject button click handler
             Button confirmButton = new Button("Confirm Reject", new Icon(VaadinIcon.CHECK));
             confirmButton.getStyle()
                     .set("background-color", "var(--danger-color)")
                     .set("color", "white");
             confirmButton.addClickListener(event -> {
+                // Disable both main buttons immediately to prevent double-clicks
+                rejectButton.setEnabled(false);
+                approveButton.setEnabled(false);
+
+                // Also disable the dialog buttons
+                cancelButton.setEnabled(false);
+                confirmButton.setEnabled(false);
+
                 workflowData.put("approvalNotes", approvalNotes.getValue());
                 workflowData.put("approvalDecision", "Rejected");
                 executionContext.put("workflowStatus", "Rejected");
@@ -279,10 +286,6 @@ public class ApprovalNode extends WorkflowNode {
                 // Set flag to return to upload node
                 executionContext.put("returnToUpload", true);
                 executionContext.put("advanceWorkflow", true);
-
-                // Disable buttons after action
-                rejectButton.setEnabled(false);
-                approveButton.setEnabled(false);
 
                 confirmDialog.close();
                 Notification.show("Document rejected",

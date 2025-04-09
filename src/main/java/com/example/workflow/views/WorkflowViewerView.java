@@ -96,11 +96,14 @@ public class WorkflowViewerView extends VerticalLayout {
             Button useButton = new Button("Use");
             useButton.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
             useButton.addClickListener(e -> {
-                // Navigate to the new execution route.
-                // Make sure that 'entity' here is a WorkflowJsonEntity.
-                getUI().ifPresent(ui -> ui.getPage().setLocation("workflow-use/new/" + entity.getId()));
-                Notification.show("New workflow instance created. " +
-                        "If previously uploaded files have expired, please re-upload them.");
+                // Create the execution first, then navigate to it
+                getUI().ifPresent(ui -> {
+                    // Navigate to the new execution route with the workflow definition ID
+                    ui.navigate("workflow-use/new/" + entity.getId());
+
+                    // After navigation, the WorkflowUseView will create the execution
+                    // and should update the URL to include the execution ID
+                });
             });
 
             return useButton;

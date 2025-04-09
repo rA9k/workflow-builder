@@ -224,6 +224,13 @@ public class UploadNode extends WorkflowNode {
         });
 
         nextButton.addClickListener(e -> {
+            // Disable button immediately to prevent double-clicks
+            nextButton.setEnabled(false);
+
+            // For Upload component, we need to use a different approach
+            upload.getElement().setProperty("nodrop", true);
+            upload.getElement().setAttribute("disabled", true);
+
             this.status = "Completed";
             executionContext.put("advanceWorkflow", true);
 

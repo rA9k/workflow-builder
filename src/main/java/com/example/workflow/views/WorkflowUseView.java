@@ -3,7 +3,6 @@ package com.example.workflow.views;
 import com.example.workflow.components.WorkflowExecutionComponent;
 import com.example.workflow.model.WorkflowDefinition;
 import com.example.workflow.model.WorkflowExecutionEntity;
-import com.example.workflow.model.WorkflowJsonEntity;
 import com.example.workflow.repository.WorkflowExecutionRepository;
 import com.example.workflow.repository.WorkflowJsonRepository;
 import com.example.workflow.service.WorkflowExecutionEngine;
@@ -14,14 +13,12 @@ import com.vaadin.flow.component.dependency.CssImport;
 import com.vaadin.flow.component.dependency.JsModule;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H2;
-import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.router.*;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -43,7 +40,9 @@ public class WorkflowUseView extends VerticalLayout implements HasUrlParameter<L
     private final WorkflowOPAService workflowOPAService;
     private Div contentContainer;
 
-    @Autowired
+    // Add this as a class field
+    private VerticalLayout progressLayout;
+
     public WorkflowUseView(
             WorkflowJsonRepository workflowJsonRepository,
             WorkflowExecutionRepository workflowExecutionRepository,
@@ -154,6 +153,46 @@ public class WorkflowUseView extends VerticalLayout implements HasUrlParameter<L
         }
     }
 
+    // Add this method to refresh only the progress indicators
+    public void refreshOnlyProgressIndicators(WorkflowExecutionEntity execution, WorkflowDefinition definition) {
+        // First, fetch the latest execution data to ensure we have the most up-to-date
+        // state
+        WorkflowExecutionEntity latestExecution = workflowExecutionRepository.findById(execution.getId())
+                .orElse(execution);
+
+        // Remove only the progress layout
+        if (progressLayout != null && progressLayout.getParent() != null) {
+            contentContainer.remove(progressLayout);
+        }
+
+        // Create a new progress layout with the latest execution data
+        this.progressLayout = createProgressIndicator(latestExecution, definition);
+
+        // Add the new progress layout to the content container
+        contentContainer.addComponentAsFirst(progressLayout);
+    }
+
+    // Modify the existing refreshProgressIndicators method to call our new method
+    public void refreshProgressIndicators(WorkflowExecutionEntity execution, WorkflowDefinition definition) {
+        // First, get the latest execution data from the database
+        WorkflowExecutionEntity latestExecution = workflowExecutionRepository.findById(execution.getId())
+                .orElse(execution);
+
+        // Remove the old progress layout
+        contentContainer.removeAll();
+
+        // Create a new progress layout with the latest execution data
+        VerticalLayout progressLayout = createProgressIndicator(latestExecution, definition);
+
+        // Create the execution component with the latest data
+        WorkflowExecutionComponent executionComponent = createExecutionComponent(
+                latestExecution, definition);
+
+        // Add both to the content container
+        contentContainer.add(progressLayout);
+        contentContainer.add(executionComponent);
+    }
+
     @Override
     public void setParameter(BeforeEvent event, @OptionalParameter Long parameter) {
         if (parameter == null) {
@@ -182,12 +221,19 @@ public class WorkflowUseView extends VerticalLayout implements HasUrlParameter<L
                                 WorkflowExecutionEntity execution = executionEngine.startExecution(definition,
                                         username);
 
+                                UI.getCurrent().getPage().getHistory().replaceState(null,
+                                        "workflow-use/" + execution.getId());
+
+                                // Then deploy the policy
+                                workflowOPAService.deployWorkflowExecutionPolicy(
+                                        entity.getId(), execution.getId(), username);
+
                                 // Create the execution component
                                 WorkflowExecutionComponent executionComponent = createExecutionComponent(
                                         execution, definition);
 
                                 // Create the progress indicator
-                                VerticalLayout progressLayout = createProgressIndicator(execution, definition);
+                                this.progressLayout = createProgressIndicator(execution, definition);
 
                                 // Add both to the content container
                                 contentContainer.add(progressLayout);
@@ -218,7 +264,7 @@ public class WorkflowUseView extends VerticalLayout implements HasUrlParameter<L
                                         execution, definition);
 
                                 // Create the progress indicator
-                                VerticalLayout progressLayout = createProgressIndicator(execution, definition);
+                                this.progressLayout = createProgressIndicator(execution, definition);
 
                                 // Add both to the content container
                                 contentContainer.add(progressLayout);
@@ -242,32 +288,26 @@ public class WorkflowUseView extends VerticalLayout implements HasUrlParameter<L
     private WorkflowExecutionComponent createExecutionComponent(
             WorkflowExecutionEntity execution, WorkflowDefinition definition) {
 
-        // Create the progress indicator first
-        VerticalLayout progressLayout = createProgressIndicator(execution, definition);
-
-        // Create the execution component
+        // Create the execution component with a refresh callback
         WorkflowExecutionComponent component = new WorkflowExecutionComponent(
-                execution, definition, executionEngine);
+                execution,
+                definition,
+                executionEngine,
+                () -> {
+                    // Get the updated execution from the database
+                    WorkflowExecutionEntity updatedExecution = executionEngine.getExecution(execution.getId());
+                    refreshProgressIndicators(updatedExecution, definition);
+                });
 
-        // Create a container to hold both the progress indicator and the execution
-        // component
-        VerticalLayout container = new VerticalLayout();
-        container.setPadding(false);
-        container.setSpacing(true);
-
-        // Add the progress indicator at the top
-        container.add(progressLayout);
-
-        // Add the execution component below it
-        container.add(component);
-
-        // Return the component itself (we'll add the container to the contentContainer
-        // in setParameter)
+        // Return the component
         return component;
     }
 
     private VerticalLayout createProgressIndicator(
             WorkflowExecutionEntity execution, WorkflowDefinition definition) {
+
+        // Get the latest node statuses
+        Map<String, String> nodeStatuses = execution.getNodeStatusesAsMap();
 
         VerticalLayout progressLayout = new VerticalLayout();
         progressLayout.setSpacing(false);
@@ -300,27 +340,41 @@ public class WorkflowUseView extends VerticalLayout implements HasUrlParameter<L
         stagesLayout.setSpacing(false);
         stagesLayout.addClassName("workflow-stages");
 
+        // Get the current node index from the execution
+        currentNodeIndex = execution.getCurrentNodeIndex();
+        totalNodes = definition.getNodeCount();
+
         // Add stage for each node in the workflow
         for (int i = 0; i < totalNodes; i++) {
             var node = definition.getNodeAt(i);
+            String nodeName = node.getName();
+            String nodeStatus = nodeStatuses.getOrDefault(nodeName, "Pending");
 
             Div stageDiv = new Div();
             stageDiv.addClassName("workflow-stage");
 
             Div indicator = new Div();
             indicator.addClassName("stage-indicator");
-            if (i < currentNodeIndex) {
+
+            // Set the indicator state based on node status
+            if ("Completed".equals(nodeStatus) || "Skipped".equals(nodeStatus)) {
                 indicator.addClassName("completed");
                 indicator.setText("✓");
-            } else if (i == currentNodeIndex) {
+            } else if (i == currentNodeIndex || "In Progress".equals(nodeStatus)) {
                 indicator.addClassName("active");
                 indicator.setText(String.valueOf(i + 1));
+            } else if ("Rejected".equals(nodeStatus)) {
+                indicator.addClassName("rejected");
+                indicator.setText("✗");
+            } else if ("Returned".equals(nodeStatus)) {
+                indicator.addClassName("returned");
+                indicator.setText("!");
             } else {
                 indicator.setText(String.valueOf(i + 1));
             }
 
             Div label = new Div();
-            label.setText(node.getName());
+            label.setText(nodeName);
             label.addClassName("stage-label");
 
             stageDiv.add(indicator, label);
@@ -360,5 +414,33 @@ public class WorkflowUseView extends VerticalLayout implements HasUrlParameter<L
         return (authentication != null && authentication.getName() != null)
                 ? authentication.getName()
                 : "anonymous";
+    }
+
+    // Add this method to force a complete refresh
+    public void forceCompleteRefresh(Long executionId) {
+        try {
+            // Get the latest execution data from the database
+            WorkflowExecutionEntity latestExecution = workflowExecutionRepository.findById(executionId)
+                    .orElseThrow(() -> new RuntimeException("Execution not found"));
+
+            // Get the workflow definition
+            WorkflowDefinition definition = new WorkflowDefinition(latestExecution.getWorkflow());
+
+            // Clear the container
+            contentContainer.removeAll();
+
+            // Create new components with fresh data
+            VerticalLayout newProgressLayout = createProgressIndicator(latestExecution, definition);
+            WorkflowExecutionComponent newExecutionComponent = createExecutionComponent(latestExecution, definition);
+
+            // Add them to the container
+            contentContainer.add(newProgressLayout);
+            contentContainer.add(newExecutionComponent);
+
+            // Update the class field
+            this.progressLayout = newProgressLayout;
+        } catch (Exception e) {
+            Notification.show("Error refreshing view: " + e.getMessage());
+        }
     }
 }

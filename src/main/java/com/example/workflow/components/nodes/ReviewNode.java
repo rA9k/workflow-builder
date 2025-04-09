@@ -14,7 +14,6 @@ import com.vaadin.flow.component.orderedlayout.FlexComponent.JustifyContentMode;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.TextArea;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 
@@ -73,7 +72,6 @@ public class ReviewNode extends WorkflowNode {
 
         // Get necessary context data
         Long workflowId = (Long) executionContext.get("workflowId");
-        Long executionId = (Long) executionContext.get("executionId");
         byte[] uploadedDocument = (byte[]) executionContext.get("uploadedDocument");
         String uploadedFileName = (String) executionContext.get("uploadedFileName");
 
@@ -195,7 +193,15 @@ public class ReviewNode extends WorkflowNode {
         // Return for Changes Button
         // Return for Changes Button
         returnButton.addClickListener(e -> {
+            // Disable both buttons immediately to prevent double-clicks
+            returnButton.setEnabled(false);
+            completeReviewButton.setEnabled(false);
+
             if (notes.getValue().trim().isEmpty()) {
+                // Re-enable buttons if validation fails
+                returnButton.setEnabled(true);
+                completeReviewButton.setEnabled(true);
+
                 Notification.show("Please provide review notes before returning the document",
                         3000, Notification.Position.BOTTOM_CENTER);
                 return;
@@ -217,10 +223,6 @@ public class ReviewNode extends WorkflowNode {
             executionContext.put("returnToUpload", true);
             executionContext.put("advanceWorkflow", true);
 
-            // Disable buttons after action
-            returnButton.setEnabled(false);
-            completeReviewButton.setEnabled(false);
-
             // Show notification
             Notification.show("Document returned for changes",
                     3000, Notification.Position.BOTTOM_END);
@@ -235,6 +237,10 @@ public class ReviewNode extends WorkflowNode {
                 .set("background-color", "var(--secondary-color)")
                 .set("color", "white");
         completeReviewButton.addClickListener(e -> {
+            // Disable both buttons immediately to prevent double-clicks
+            returnButton.setEnabled(false);
+            completeReviewButton.setEnabled(false);
+
             workflowData.put("reviewNotes", notes.getValue());
             workflowData.put("reviewDecision", "Complete");
             this.status = "Completed";
@@ -245,10 +251,6 @@ public class ReviewNode extends WorkflowNode {
             statusBadge.addClassName("completed");
 
             executionContext.put("advanceWorkflow", true);
-
-            // Disable buttons after action
-            returnButton.setEnabled(false);
-            completeReviewButton.setEnabled(false);
 
             // Show notification
             Notification.show("Review completed successfully",

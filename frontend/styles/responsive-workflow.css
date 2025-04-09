@@ -48,12 +48,16 @@
 
 /* Progress indicator */
 .workflow-progress-container {
-    margin: 1.5rem 0;
+    margin: 1rem 0 1.5rem;
     position: relative;
+    background-color: rgba(240, 240, 240, 0.5);
+    border-radius: 8px;
+    padding: 1rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .workflow-progress-bar {
-    height: 4px;
+    height: 3px;
     background-color: var(--light-gray);
     border-radius: 4px;
     overflow: hidden;
@@ -71,6 +75,8 @@
     justify-content: space-between;
     margin-top: 0.5rem;
     position: relative;
+    height: auto;
+    min-height: 60px;
 }
 
 .workflow-stage {
@@ -82,36 +88,39 @@
 }
 
 .stage-indicator {
-    width: 24px;
-    height: 24px;
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
     background-color: var(--light-gray);
     border: 2px solid var(--border-color);
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.25rem;
     z-index: 2;
     transition: all 0.3s ease;
+    font-size: 0.7rem;
 }
 
 .stage-indicator.active {
     background-color: var(--primary-color);
     border-color: var(--primary-color);
     color: white;
+    box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.2);
 }
 
 .stage-indicator.completed {
     background-color: var(--secondary-color);
     border-color: var(--secondary-color);
     color: white;
+    font-size: 0.7rem;
 }
 
 .stage-label {
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     text-align: center;
     color: var(--text-color);
-    max-width: 100px;
+    max-width: 80px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -178,7 +187,12 @@
 
 .node-status.rejected {
     background-color: var(--danger-color);
-    color: white;
+    color: red;
+}
+
+.node-status.returned {
+    background-color: var(--warning-color);
+    color: yellow;
 }
 
 /* Form elements */

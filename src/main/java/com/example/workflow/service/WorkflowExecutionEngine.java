@@ -226,7 +226,7 @@ public class WorkflowExecutionEngine {
                     execution.setStatus("Completed");
                 }
 
-                // Save the updated execution
+                // Save and return the updated execution
                 return executionRepository.save(execution);
             } catch (Exception e) {
                 throw new RuntimeException("Error advancing workflow", e);

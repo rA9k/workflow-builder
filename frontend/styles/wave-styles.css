@@ -156,6 +156,11 @@ vaadin-overlay {
     color: white !important;
 }
 
+.badge-returned {
+    background-color: #FF9800 !important; /* Orange */
+    color: white !important;
+}
+
 .badge-upload {
     background-color: #2196F3 !important; /* Blue */
     color: white !important;

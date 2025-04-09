@@ -4,7 +4,9 @@ import com.example.workflow.components.nodes.WorkflowNode;
 import com.example.workflow.model.WorkflowDefinition;
 import com.example.workflow.model.WorkflowExecutionEntity;
 import com.example.workflow.service.WorkflowExecutionEngine;
+import com.example.workflow.views.WorkflowUseView;
 import com.vaadin.flow.component.Component;
+import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H3;
@@ -15,7 +17,7 @@ import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.TextArea;
 
 import java.util.Map;
-import java.util.function.Consumer;
+import java.util.Optional;
 
 /**
  * Reusable component for displaying and interacting with a workflow execution
@@ -27,14 +29,13 @@ public class WorkflowExecutionComponent extends VerticalLayout {
     private final WorkflowExecutionEngine executionEngine;
     private Map<String, Object> executionContext;
 
-    private HorizontalLayout progressBar;
     private Div contentArea;
-    private Consumer<WorkflowExecutionEntity> onWorkflowCompleted;
 
     public WorkflowExecutionComponent(
             WorkflowExecutionEntity execution,
             WorkflowDefinition definition,
-            WorkflowExecutionEngine executionEngine) {
+            WorkflowExecutionEngine executionEngine,
+            Runnable refreshProgressCallback) {
 
         this.execution = execution;
         this.definition = definition;
@@ -46,20 +47,6 @@ public class WorkflowExecutionComponent extends VerticalLayout {
         // Create workflow header
         H3 header = new H3("Workflow: " + definition.getName());
         add(header);
-
-        // Create progress bar
-        progressBar = new HorizontalLayout();
-        progressBar.addClassName("workflow-progress-container");
-        progressBar.setWidthFull();
-        progressBar.setSpacing(false);
-        progressBar.setMargin(false);
-        progressBar.getStyle()
-                .set("overflow-x", "auto")
-                .set("padding", "1rem 0")
-                .set("min-height", "60px");
-
-        // Make sure to add the progress bar to the layout
-        // add(progressBar);
 
         // Create content area
         contentArea = new Div();
@@ -74,86 +61,29 @@ public class WorkflowExecutionComponent extends VerticalLayout {
         // Initialize execution context
         executionContext = executionEngine.createExecutionContext(execution);
 
+        // Create a direct reference to the WorkflowUseView for complete refresh
+        executionContext.put("forceCompleteRefresh", (Runnable) () -> {
+            UI.getCurrent().access(() -> {
+                // Find the WorkflowUseView instance
+                Optional<WorkflowUseView> viewOpt = UI.getCurrent().getChildren()
+                        .filter(component -> component instanceof WorkflowUseView)
+                        .map(component -> (WorkflowUseView) component)
+                        .findFirst();
+
+                if (viewOpt.isPresent()) {
+                    viewOpt.get().forceCompleteRefresh(execution.getId());
+                } else {
+                    // Fallback to the provided callback
+                    refreshProgressCallback.run();
+                }
+            });
+        });
+
         // Add completion handler
         executionContext.put("onComplete", (Runnable) this::moveToNextNode);
 
-        // Render the workflow
-        updateProgressBar();
+        // Display the current node
         displayCurrentNode();
-    }
-
-    /**
-     * Set a callback to be invoked when the workflow is completed
-     */
-    public void setOnWorkflowCompleted(Consumer<WorkflowExecutionEntity> callback) {
-        this.onWorkflowCompleted = callback;
-    }
-
-    /**
-     * Update the progress bar to reflect the current state of the workflow
-     */
-    private void updateProgressBar() {
-        progressBar.removeAll();
-        progressBar.getStyle()
-                .set("overflow-x", "auto")
-                .set("display", "flex")
-                .set("padding", "1rem 0")
-                .set("min-height", "60px"); // Ensure minimum height to prevent cramping
-
-        try {
-            Map<String, String> nodeStatuses = execution.getNodeStatusesAsMap();
-
-            for (int i = 0; i < definition.getNodeCount(); i++) {
-                WorkflowNode node = definition.getNodeAt(i);
-                String nodeName = node.getName();
-                String status = nodeStatuses.getOrDefault(nodeName, "Pending");
-
-                Div stepDiv = new Div();
-                stepDiv.setText(nodeName);
-                stepDiv.addClassName("workflow-step");
-                stepDiv.getStyle()
-                        .set("padding", "0.5rem 1rem")
-                        .set("border-radius", "4px")
-                        .set("margin-right", "0.5rem")
-                        .set("white-space", "nowrap")
-                        .set("flex-shrink", "0"); // Prevent shrinking
-
-                // Set color based on status
-                if ("Completed".equals(status)) {
-                    stepDiv.getStyle().set("background-color", "#4CAF50").set("color", "white");
-                } else if ("In Progress".equals(status)) {
-                    stepDiv.getStyle().set("background-color", "#2196F3").set("color", "white");
-                } else if ("Rejected".equals(status)) {
-                    stepDiv.getStyle().set("background-color", "#F44336").set("color", "white");
-                } else if ("Returned".equals(status)) {
-                    stepDiv.getStyle().set("background-color", "#FFC107").set("color", "black");
-                } else if ("Skipped".equals(status)) {
-                    stepDiv.getStyle().set("background-color", "#9E9E9E").set("color", "white");
-                } else {
-                    stepDiv.getStyle().set("background-color", "#E0E0E0").set("color", "black");
-                }
-
-                // Highlight current node
-                if (i == execution.getCurrentNodeIndex()) {
-                    stepDiv.getStyle().set("border", "2px solid #000");
-                }
-
-                progressBar.add(stepDiv);
-
-                // Add separator chevron between nodes
-                if (i < definition.getNodeCount() - 1) {
-                    Div chevron = new Div();
-                    chevron.setText("›");
-                    chevron.getStyle()
-                            .set("margin", "0 0.5rem")
-                            .set("font-size", "1.5rem")
-                            .set("color", "#666");
-                    progressBar.add(chevron);
-                }
-            }
-        } catch (Exception e) {
-            Notification.show("Error updating progress bar: " + e.getMessage());
-        }
     }
 
     /**
@@ -187,39 +117,20 @@ public class WorkflowExecutionComponent extends VerticalLayout {
      */
     private void moveToNextNode() {
         try {
+            // Disable UI interactions during processing
+            contentArea.setEnabled(false);
+
             // Update the execution with current context
             executionEngine.advanceWorkflow(execution, executionContext);
 
-            // Reload execution to get updated state
-            WorkflowExecutionEntity updatedExecution = executionEngine.getExecution(execution.getId());
-
-            // Check if workflow is completed
-            if ("Completed".equals(updatedExecution.getStatus()) ||
-                    updatedExecution.getCurrentNodeIndex() >= definition.getNodeCount()) {
-
-                if (onWorkflowCompleted != null) {
-                    onWorkflowCompleted.accept(updatedExecution);
-                }
-                showWorkflowSummary();
-                return;
+            // Force a complete refresh of the UI
+            if (executionContext.containsKey("forceCompleteRefresh")) {
+                ((Runnable) executionContext.get("forceCompleteRefresh")).run();
             }
-
-            // Update local reference and context
-            execution.setCurrentNodeIndex(updatedExecution.getCurrentNodeIndex());
-            execution.setStatus(updatedExecution.getStatus());
-            execution.setNodeStatuses(updatedExecution.getNodeStatuses());
-            execution.setWorkflowData(updatedExecution.getWorkflowData());
-
-            // Refresh execution context
-            executionContext = executionEngine.createExecutionContext(execution);
-            executionContext.put("onComplete", (Runnable) this::moveToNextNode);
-
-            // Update UI
-            updateProgressBar();
-            displayCurrentNode();
 
         } catch (Exception e) {
             Notification.show("Error advancing workflow: " + e.getMessage());
+            contentArea.setEnabled(true);
         }
     }
 
