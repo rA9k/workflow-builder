@@ -1,10 +1,13 @@
 package com.example.workflow.views;
 
+import com.example.workflow.entity.OrganizationEntity;
 import com.example.workflow.model.WorkflowJsonEntity;
 import com.example.workflow.repository.WorkflowJsonRepository;
+import com.example.workflow.service.OrganizationService;
 import com.example.workflow.service.WorkflowOPAService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vaadin.flow.component.AttachEvent;
+import com.vaadin.flow.component.ClientCallable;
 import com.vaadin.flow.component.dependency.JsModule;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.HasComponents;
@@ -15,6 +18,7 @@ import com.vaadin.flow.component.dependency.CssImport;
 import com.vaadin.flow.component.dnd.DragSource;
 import com.vaadin.flow.component.dnd.DropTarget;
 import com.vaadin.flow.component.dialog.Dialog;
+import com.vaadin.flow.component.page.PendingJavaScriptResult;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.icon.Icon;
@@ -23,6 +27,10 @@ import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.TextField;
+import elemental.json.JsonArray;
+import elemental.json.JsonObject;
+import elemental.json.impl.JreJsonFactory;
+import com.vaadin.flow.component.dependency.JavaScript;
 import com.vaadin.flow.router.BeforeEvent;
 import com.vaadin.flow.router.HasUrlParameter;
 import com.vaadin.flow.router.OptionalParameter;
@@ -32,12 +40,17 @@ import com.vaadin.flow.component.button.ButtonVariant;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Route(value = "workflow-creator")
 @RouteAlias(value = "workflow-creator/:workflowId?")
 @CssImport("./styles/wave-styles.css")
-@CssImport("./styles/responsive-workflow.css") // New responsive styles
-@JsModule("./js/workflow-responsive.js") // New responsive JS
+@CssImport("./styles/responsive-workflow.css")
+@CssImport("./styles/workflow-connections.css")
+@JavaScript("./js/jsplumb.min.js")
+
+@JavaScript("./js/workflow-connections.js")
+@JsModule("./js/workflow-responsive.js")
 public class WorkflowCreatorView extends VerticalLayout implements HasUrlParameter<Long> {
 
     private final HorizontalLayout workflowCanvas;
@@ -51,62 +64,222 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
     private Checkbox editModeToggle;
     private Button clearAllBtn;
 
+    private Map<String, Component> nodeIdMap = new HashMap<>();
+    private List<Map<String, String>> connections = new ArrayList<>();
+
     // Inject the OPA service
     @Autowired
     private WorkflowOPAService workflowOPAService;
 
+    @Autowired
+    private OrganizationService organizationService;
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(WorkflowCreatorView.class);
+
     @Override
     public void setParameter(BeforeEvent event, @OptionalParameter Long workflowId) {
+        log.info("setParameter called with workflowId: {}", workflowId);
         if (workflowId != null) {
-            workflowJsonRepository.findById(workflowId).ifPresentOrElse(
-                    entity -> loadWorkflowFromEntity(entity),
-                    () -> Notification.show("Workflow not found with ID: " + workflowId));
+            // Get current organization
+            OrganizationEntity organization = organizationService.getCurrentOrganization();
+
+            // Find workflow by ID and organization
+            Optional<WorkflowJsonEntity> workflowOpt = workflowJsonRepository.findById(workflowId);
+
+            if (workflowOpt.isPresent()) {
+                WorkflowJsonEntity entity = workflowOpt.get();
+
+                // Check if workflow belongs to current organization or has no organization yet
+                if (entity.getOrganization() == null ||
+                        entity.getOrganization().getId().equals(organization.getId())) {
+                    loadWorkflowFromEntity(entity);
+                } else {
+                    Notification.show("You don't have access to this workflow",
+                            3000, Notification.Position.MIDDLE);
+                }
+            } else {
+                Notification.show("Workflow not found with ID: " + workflowId);
+            }
         }
     }
 
     private void loadWorkflowFromEntity(WorkflowJsonEntity entity) {
         try {
-            workflowCanvas.removeAll();
-            workflowCanvas.add(connectorLayer);
-            nodeProperties.clear();
+            log.info("Loading workflow entity: {}", entity.getId());
 
-            ObjectMapper mapper = new ObjectMapper();
-            List<Map<String, Object>> nodesData = mapper.readValue(
-                    entity.getData(),
-                    new com.fasterxml.jackson.core.type.TypeReference<List<Map<String, Object>>>() {
-                    });
-            System.out.println("Loading workflow data from DB: " + entity.getData());
+            OrganizationEntity currentOrg = organizationService.getCurrentOrganization();
+            if (entity.getOrganization() != null &&
+                    !entity.getOrganization().getId().equals(currentOrg.getId())) {
+                Notification.show("You don't have access to this workflow",
+                        3000, Notification.Position.MIDDLE);
+                return;
+            }
+            // Clear existing content without removing the connector layer
+            workflowCanvas.getChildren()
+                    .filter(component -> component != connectorLayer)
+                    .collect(Collectors.toList()) // Create a copy to avoid ConcurrentModificationException
+                    .forEach(workflowCanvas::remove);
 
-            nodesData.sort(Comparator.comparingInt(n -> (int) n.getOrDefault("order", 0)));
-
-            List<Component> nodes = new ArrayList<>();
-            for (Map<String, Object> nodeMap : nodesData) {
-                String name = (String) nodeMap.get("name");
-                String type = (String) nodeMap.get("type");
-                String desc = (String) nodeMap.get("description");
-                Map<String, String> additional = (Map<String, String>) nodeMap.get("props");
-
-                Button nodeBtn = createWorkflowButton(type);
-                nodeBtn.setText(name);
-
-                WorkflowNodeProperties props = new WorkflowNodeProperties();
-                props.name = name;
-                props.type = type;
-                props.description = desc;
-                if (additional != null) {
-                    props.additionalProperties.putAll(additional);
-                }
-                nodeProperties.put(nodeBtn, props);
-                workflowCanvas.addComponentAtIndex(workflowCanvas.getComponentCount() - 1, nodeBtn);
-                nodes.add(nodeBtn);
+            // Add the connector layer back if it was removed
+            if (!workflowCanvas.getChildren().anyMatch(c -> c == connectorLayer)) {
+                workflowCanvas.add(connectorLayer);
             }
 
-            UI.getCurrent().getPage().executeJs(
-                    "setTimeout(() => { if (window.updateConnectors) window.updateConnectors($0); }, 100);",
-                    workflowCanvas.getElement());
+            // Clear existing node properties and mappings
+            nodeProperties.clear();
+            nodeIdMap.clear();
+            connections.clear();
 
-            Notification.show("Workflow loaded from DB: " + entity.getId());
+            try {
+                ObjectMapper mapper = new ObjectMapper();
+                Map<String, Object> workflowData = mapper.readValue(
+                        entity.getData(),
+                        new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {
+                        });
+
+                // Extract nodes data
+                List<Map<String, Object>> nodesData = (List<Map<String, Object>>) workflowData.getOrDefault("nodes",
+                        new ArrayList<>());
+
+                log.info("Loaded {} nodes from workflow data", nodesData.size());
+
+                // Sort nodes by order if available
+                nodesData.sort(Comparator.comparingInt(n -> (int) n.getOrDefault("order", 0)));
+
+                // Create and add nodes to the canvas
+                for (Map<String, Object> nodeMap : nodesData) {
+                    String name = (String) nodeMap.get("name");
+                    String type = (String) nodeMap.get("type");
+                    String desc = (String) nodeMap.getOrDefault("description", "");
+
+                    @SuppressWarnings("unchecked")
+                    Map<String, String> props = (Map<String, String>) nodeMap.getOrDefault("props",
+                            new HashMap<String, String>());
+
+                    // Extract or generate node ID
+                    String nodeId = (String) nodeMap.get("id");
+                    if (nodeId == null) {
+                        nodeId = "node-" + UUID.randomUUID().toString();
+                    }
+
+                    // Create the workflow button with the node ID
+                    Button nodeBtn = createWorkflowButton(type, nodeId);
+                    nodeBtn.setText(name);
+
+                    // Create and store node properties
+                    WorkflowNodeProperties nodeProps = new WorkflowNodeProperties();
+                    nodeProps.name = name;
+                    nodeProps.type = type;
+                    nodeProps.description = desc;
+                    if (props != null) {
+                        nodeProps.additionalProperties.putAll(props);
+                    }
+
+                    nodeProperties.put(nodeBtn, nodeProps);
+
+                    // Add the node to the canvas before the connector layer
+                    workflowCanvas.addComponentAtIndex(workflowCanvas.getComponentCount() - 1, nodeBtn);
+
+                    arrangeNodesInGrid();
+
+                    // Set the position of the node if available
+                    @SuppressWarnings("unchecked")
+                    Map<String, String> position = (Map<String, String>) nodeMap.get("position");
+                    if (position != null) {
+                        String left = position.get("left");
+                        String top = position.get("top");
+                        if (left != null && top != null) {
+                            nodeBtn.getElement().getStyle().set("left", left);
+                            nodeBtn.getElement().getStyle().set("top", top);
+                        } else {
+                            // Set default position with offset to avoid stacking
+                            int index = workflowCanvas.indexOf(nodeBtn);
+                            nodeBtn.getElement().getStyle().set("left", (50 + (index * 30)) + "px");
+                            nodeBtn.getElement().getStyle().set("top", (50 + (index * 30)) + "px");
+                        }
+                    } else {
+                        // Set default position with offset to avoid stacking
+                        int index = workflowCanvas.indexOf(nodeBtn);
+                        nodeBtn.getElement().getStyle().set("left", (50 + (index * 30)) + "px");
+                        nodeBtn.getElement().getStyle().set("top", (50 + (index * 30)) + "px");
+                    }
+
+                    log.debug("Added node {} of type {} with ID {}", name, type, nodeId);
+                }
+
+                // Extract connections data
+                if (workflowData.containsKey("connections")) {
+                    connections = (List<Map<String, String>>) workflowData.get("connections");
+                    log.info("Loaded {} connections from workflow data", connections.size());
+
+                    // Check if connections use jsPlumb internal IDs and migrate if needed
+                    boolean needsMigration = false;
+                    for (Map<String, String> conn : connections) {
+                        if (conn.containsKey("source") && conn.get("source").startsWith("jsPlumb_")) {
+                            needsMigration = true;
+                            break;
+                        }
+                    }
+
+                    if (needsMigration) {
+                        log.info("Migrating connections from jsPlumb internal IDs to node IDs");
+
+                        // Create a mapping from jsPlumb IDs to node IDs
+                        Map<String, String> idMapping = new HashMap<>();
+
+                        // This is a simplified approach - in a real implementation,
+                        // you would need to determine the mapping based on the DOM structure
+                        // For now, we'll just use the node order to map IDs
+                        List<String> nodeIds = nodesData.stream()
+                                .map(node -> (String) node.get("id"))
+                                .collect(Collectors.toList());
+
+                        for (int i = 0; i < nodeIds.size(); i++) {
+                            // Map jsPlumb_6_X to the actual node ID
+                            idMapping.put("jsPlumb_6_" + (i + 1), nodeIds.get(i));
+                        }
+
+                        // Update the connections with the mapped IDs
+                        for (Map<String, String> conn : connections) {
+                            if (conn.containsKey("source") && idMapping.containsKey(conn.get("source"))) {
+                                conn.put("source", idMapping.get(conn.get("source")));
+                            }
+                            if (conn.containsKey("target") && idMapping.containsKey(conn.get("target"))) {
+                                conn.put("target", idMapping.get(conn.get("target")));
+                            }
+                        }
+                    }
+                }
+
+                // First ensure jsPlumb is initialized
+                UI.getCurrent().getPage().executeJs(
+                        "if (!window.workflowConnections || !window.workflowConnections.jsPlumbInstance) {" +
+                                "  console.log('Initializing jsPlumb...');" +
+                                "  if (window.workflowConnections) {" +
+                                "    window.workflowConnections.initialize();" +
+                                "  }" +
+                                "}");
+
+                // Then load connections with a shorter delay to ensure DOM and jsPlumb are
+                // ready
+                UI.getCurrent().getPage().executeJs(
+                        "setTimeout(function() {" +
+                                "  console.log('Loading connections...');" +
+                                "  if (window.workflowConnections) {" +
+                                "    window.workflowConnections.loadConnections($0);" +
+                                "  }" +
+                                "}, 500);", // Reduced delay to 0.5 seconds
+                        mapper.writeValueAsString(connections));
+
+                log.info("Workflow loaded successfully: {}", entity.getId());
+                Notification.show("Workflow loaded successfully", 3000, Notification.Position.BOTTOM_END);
+
+            } catch (Exception e) {
+                log.error("Error parsing workflow data", e);
+                Notification.show("Error parsing workflow data: " + e.getMessage());
+            }
         } catch (Exception e) {
+            log.error("Error loading workflow", e);
             Notification.show("Error loading workflow: " + e.getMessage());
         }
     }
@@ -120,6 +293,7 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
     }
 
     public WorkflowCreatorView(WorkflowJsonRepository workflowJsonRepository) {
+        log.info("WorkflowCreatorView constructor started.");
         this.workflowJsonRepository = workflowJsonRepository;
 
         setSizeFull();
@@ -131,17 +305,21 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
         mainContainer.setSpacing(false);
         mainContainer.setClassName("responsive-main-container");
 
+        // In the constructor, update the componentsPanel configuration
         componentsPanel = new VerticalLayout();
         componentsPanel.addClassName("sidebar-panel");
         componentsPanel.addClassName("responsive-sidebar");
         componentsPanel.setWidth("200px");
         componentsPanel.setHeight("100%");
+        componentsPanel.setPadding(true);
+        componentsPanel.setSpacing(true); // Ensure spacing between components
         componentsPanel.getStyle()
                 .set("background-color", "#f8f9fa")
                 .set("padding", "1rem")
                 .set("box-shadow", "2px 0 5px rgba(0,0,0,0.1)")
                 .set("z-index", "1000")
-                .set("flex-shrink", "0");
+                .set("flex-shrink", "0")
+                .set("overflow-y", "auto"); // Add scrolling for many components
 
         H3 componentsTitle = new H3("Components");
         componentsTitle.getStyle().set("margin", "0 0 1rem 0");
@@ -181,7 +359,7 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
         workflowCanvas = new HorizontalLayout();
         workflowCanvas.addClassName("workflow-canvas");
         workflowCanvas.setSizeFull();
-        workflowCanvas.setSpacing(true);
+        workflowCanvas.setSpacing(false);
         workflowCanvas.getStyle()
                 .set("background-color", "#ffffff")
                 .set("border", "1px solid #dee2e6")
@@ -189,6 +367,7 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
                 .set("padding", "2rem")
                 .set("min-height", "300px")
                 .set("overflow", "auto")
+                .set("position", "relative") // Add this
                 .set("z-index", "2");
 
         connectorLayer = new Div();
@@ -240,7 +419,7 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
         setFlexGrow(1, mainContainer);
 
         setupCanvasDropTarget();
-
+        log.info("WorkflowCreatorView constructor finished.");
     }
 
     // -- Canvas & Drag/Drop methods (createDraggableButton, createWorkflowButton,
@@ -255,71 +434,30 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
      */
     @Override
     protected void onAttach(AttachEvent attachEvent) {
+        log.info("onAttach started.");
         super.onAttach(attachEvent);
-        getUI().ifPresent(ui -> {
-            ui.getPage().executeJs(
-                    "window.updateConnectors = function(canvas) {" +
-                            "  const layer = canvas.querySelector('.connector-layer');" +
-                            "  if (!layer) {" +
-                            "    console.error('No connector layer');" +
-                            "    return;" +
-                            "  }" +
-                            "  let svg = layer.querySelector('svg');" +
-                            "  if (!svg) {" +
-                            "    svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');" +
-                            "    svg.style.width = '100%';" +
-                            "    svg.style.height = '100%';" +
-                            "    svg.style.position = 'absolute';" +
-                            "    svg.style.top = '0';" +
-                            "    svg.style.left = '0';" +
-                            "    svg.style.pointerEvents = 'none';" +
-                            "    layer.appendChild(svg);" +
-                            "    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');" +
-                            "    const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');" +
-                            "    marker.setAttribute('id', 'arrowEnd');" +
-                            "    marker.setAttribute('markerWidth', '10');" +
-                            "    marker.setAttribute('markerHeight', '10');" +
-                            "    marker.setAttribute('refX', '5');" +
-                            "    marker.setAttribute('refY', '3');" +
-                            "    marker.setAttribute('orient', 'auto');" +
-                            "    const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');" +
-                            "    pathEl.setAttribute('d', 'M0,0 L0,6 L6,3 z');" +
-                            "    pathEl.setAttribute('fill', '#333');" +
-                            "    marker.appendChild(pathEl);" +
-                            "    defs.appendChild(marker);" +
-                            "    svg.appendChild(defs);" +
-                            "  }" +
-                            "  svg.innerHTML = '';" +
-                            "  const defsNode = svg.querySelector('defs');" +
-                            "  if (defsNode) svg.appendChild(defsNode);" +
-                            "  const kids = Array.from(canvas.children).filter(c => !c.classList.contains('connector-layer'));"
-                            +
-                            "  for (let i = 0; i < kids.length - 1; i++) {" +
-                            "    const c1 = kids[i].getBoundingClientRect();" +
-                            "    const c2 = kids[i+1].getBoundingClientRect();" +
-                            "    const can = canvas.getBoundingClientRect();" +
-                            "    const x1 = c1.left + c1.width - can.left - 5;" +
-                            "    const y1 = c1.top + (c1.height / 2) - can.top;" +
-                            "    const x2 = c2.left - can.left + 5;" +
-                            "    const y2 = c2.top + (c2.height / 2) - can.top;" +
-                            "    const dx = x2 - x1;" +
-                            "    const off = 0.3 * dx;" +
-                            "    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');" +
-                            "    const d = `M ${x1} ${y1} C ${x1 + off} ${y1} ${x2 - off} ${y2} ${x2} ${y2}`;" +
-                            "    path.setAttribute('d', d);" +
-                            "    path.setAttribute('stroke', '#333');" +
-                            "    path.setAttribute('stroke-width', '2');" +
-                            "    path.setAttribute('fill', 'none');" +
-                            "    path.setAttribute('marker-end', 'url(#arrowEnd)');" +
-                            "    svg.appendChild(path);" +
-                            "  }" +
-                            "};" +
-                            "   window.addResizeListener = function(canvas) {" +
-                            "       window.addEventListener('resize', () => { if (window.updateConnectors) window.updateConnectors(canvas); });"
-                            +
-                            "   };");
-            ui.getPage().executeJs("window.addResizeListener($0);", workflowCanvas.getElement());
-        });
+
+        // Initialize jsPlumb
+        UI.getCurrent().getPage().executeJs(
+                "if (window.workflowConnections) {" +
+                        "  if (window.workflowConnections.jsPlumbInstance) {" +
+                        "    window.workflowConnections.jsPlumbInstance.reset();" +
+                        "  }" +
+                        "  window.workflowConnections.initialize();" +
+                        "  setTimeout(() => window.workflowConnections.refreshAllEndpoints(), 300);" +
+                        "}");
+
+        // Setup connection listener
+        setupConnectionListener();
+
+        // Set initial edit mode
+        UI.getCurrent().getPage().executeJs(
+                "setTimeout(function() {" +
+                        "  if (window.workflowConnections) { window.workflowConnections.setEditMode($0); }" +
+                        "}, 400);",
+                editMode);
+
+        log.info("onAttach finished.");
     }
 
     // ========== Canvas & Drag/Drop Setup ==========update
@@ -344,6 +482,7 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
                         workflowCanvas.addComponentAtIndex(workflowCanvas.getComponentCount() - 1, newBtn);
                         initializeNodeProperties(newBtn);
                         updateConnectors();
+                        refreshWorkflowConnections();
                     }
                 } else {
                     if (comp.getParent().isPresent()) {
@@ -351,6 +490,7 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
                     }
                     workflowCanvas.addComponentAtIndex(workflowCanvas.getComponentCount() - 1, comp);
                     updateConnectors();
+                    refreshWorkflowConnections();
                 }
             });
         });
@@ -379,7 +519,9 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
         Button btn = new Button(label);
         btn.addClassName("workflow-button");
         if (isToolbarButton) {
-            btn.addClassName("toolbar-button"); // only add for toolbar buttons
+            btn.addClassName("toolbar-button");
+            // Add margin to prevent stacking
+            btn.getStyle().set("margin-bottom", "10px");
         }
         btn.getStyle()
                 .set("background-color", "#ffffff")
@@ -389,15 +531,41 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
                 .set("border-left", "4px solid " + getTypeColor(label))
                 .set("z-index", "2");
 
-        DragSource<Button> dragSource = DragSource.create(btn);
-        dragSource.setDraggable(true);
-        dragSource.addDragStartListener(e -> {
-            if (editMode) {
-                selectedComponent = btn;
-            } else {
-                dragSource.setDraggable(false); // Disable dragging if not in edit mode
-            }
-        });
+        // Handle toolbar buttons differently from canvas buttons
+        if (isToolbarButton) {
+            // For toolbar buttons, we use Vaadin's drag system
+            DragSource<Button> dragSource = DragSource.create(btn);
+            dragSource.setDraggable(true);
+            dragSource.addDragStartListener(e -> {
+                if (editMode) {
+                    selectedComponent = btn;
+                } else {
+                    dragSource.setDraggable(false);
+                }
+            });
+
+            // Add drag end listener to create new button in canvas
+            dragSource.addDragEndListener(e -> {
+                if (editMode) {
+                    // Create a new button in the canvas at the drop location
+                    // This is handled by your drop target listener elsewhere
+                }
+            });
+        } else {
+            // For buttons already in the canvas, we'll let jsPlumb handle the dragging
+            // Add a data attribute that jsPlumb will use for connections
+            String nodeId = UUID.randomUUID().toString();
+            btn.getElement().setAttribute("data-node-id", nodeId);
+
+            // We'll initialize jsPlumb endpoints after the button is attached to DOM
+            btn.addAttachListener(attachEvent -> {
+                UI.getCurrent().getPage().executeJs(
+                        "if (window.workflowConnections) { " +
+                                "  window.workflowConnections.createEndpoints($0, $1); " +
+                                "}",
+                        btn.getElement(), nodeId);
+            });
+        }
 
         btn.addClickListener(evt -> {
             if (editMode) {
@@ -418,9 +586,46 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
 
     // Replace the existing createWorkflowButton method with this implementation
     private Button createWorkflowButton(String label) {
+        return createWorkflowButton(label, null);
+    }
+
+    private Button createWorkflowButton(String label, String providedNodeId) {
         Button btn = createDraggableButton(label, false);
 
+        // Generate a unique ID for this node or use the provided one
+        String nodeId = providedNodeId != null ? providedNodeId : "node-" + UUID.randomUUID().toString();
+        btn.getElement().setAttribute("data-node-id", nodeId);
+        nodeIdMap.put(nodeId, btn);
+
+        btn.getStyle()
+                .set("position", "absolute")
+                .set("z-index", "10");
+
+        if (!btn.getStyle().has("left")) {
+            // Calculate a position that avoids stacking
+            // Get the count of existing nodes to create an offset
+            int nodeCount = (int) workflowCanvas.getChildren()
+                    .filter(c -> c != connectorLayer)
+                    .count();
+
+            // Use a grid-like positioning to avoid overlap
+            int row = nodeCount / 3; // 3 nodes per row
+            int col = nodeCount % 3;
+
+            btn.getStyle().set("left", (50 + (col * 200)) + "px");
+            btn.getStyle().set("top", (50 + (row * 120)) + "px");
+        }
+
+        // btn.getElement().executeJs(
+        // "this.addEventListener('mousedown', function(e) {" +
+        // " if (e.target.classList.contains('jtk-endpoint') ||
+        // e.target.closest('.jtk-endpoint')) {" +
+        // " e.stopPropagation();" +
+        // " }" +
+        // "}, true);");
+
         btn.addClickListener(event -> {
+
             if (!editMode) {
                 return;
             }
@@ -584,24 +789,79 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
                             "}");
         });
 
-        DropTarget<Button> drop = DropTarget.create(btn);
-        drop.addDropListener(e -> {
-            if (!editMode) {
-                return;
-            }
+        btn.addAttachListener(event -> {
+            UI.getCurrent().getPage().executeJs(
+                    "setTimeout(function() {" +
+                            "  if (window.workflowConnections) { " +
+                            "    window.workflowConnections.createEndpoints($0, $1); " +
+                            "  }" +
+                            "}, 100);",
+                    btn.getElement(), nodeId);
+        });
 
-            Optional<Component> dragged = e.getDragSourceComponent();
-            dragged.ifPresent(dc -> {
-                if (dc != btn && workflowCanvas.getChildren().anyMatch(ch -> ch.equals(btn))) {
-                    int index = workflowCanvas.indexOf(btn);
-                    workflowCanvas.remove(dc);
-                    workflowCanvas.addComponentAtIndex(index, dc);
-                    updateConnectors();
-                }
-            });
+        // DropTarget<Button> drop = DropTarget.create(btn);
+        // drop.addDropListener(e -> {
+        // if (!editMode) {
+        // return;
+        // }
+
+        // Optional<Component> dragged = e.getDragSourceComponent();
+        // dragged.ifPresent(dc -> {
+        // if (dc != btn && workflowCanvas.getChildren().anyMatch(ch -> ch.equals(btn)))
+        // {
+        // int index = workflowCanvas.indexOf(btn);
+        // workflowCanvas.remove(dc);
+        // workflowCanvas.addComponentAtIndex(index, dc);
+        // updateConnectors();
+        // }
+        // });
+        // });
+
+        btn.addDetachListener(event -> {
+            // Remove from nodeIdMap
+            nodeIdMap.values().removeIf(component -> component == btn);
+
+            // Remove any connections involving this node
+            UI.getCurrent().getPage().executeJs(
+                    "window.workflowConnections.removeNodeConnections($0)",
+                    nodeId);
         });
 
         return btn;
+    }
+
+    @ClientCallable
+    public void updateConnections(String connectionsJson) {
+        try {
+            // Add a simple check to prevent processing identical connection data repeatedly
+            if (connectionsJson == null || connectionsJson.equals("[]")) {
+                // Skip processing empty connection arrays
+                return;
+            }
+
+            ObjectMapper mapper = new ObjectMapper();
+            List<Map<String, String>> newConnections = mapper.readValue(
+                    connectionsJson,
+                    new com.fasterxml.jackson.core.type.TypeReference<List<Map<String, String>>>() {
+                    });
+
+            // Check if the connections are actually different before updating and logging
+            if (!newConnections.equals(connections)) {
+                connections = newConnections;
+                System.out.println("Updated connections: " + connections);
+            }
+        } catch (Exception e) {
+            Notification.show("Error updating connections: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private void setupConnectionListener() {
+        UI.getCurrent().getPage().executeJs(
+                "window.updateNodeConnections = function(connectionsJson) {" +
+                        "   $0.$server.updateConnections(connectionsJson);" +
+                        "};",
+                getElement());
     }
 
     // ========== Properties Panel ==========
@@ -801,6 +1061,12 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
             propertiesPanel.getStyle().set("display", "none");
         });
 
+        Button toggleRemovalBtn = new Button("Toggle Connection Removal", e -> {
+            UI.getCurrent().getPage().executeJs(
+                    "window.workflowConnections.toggleRemovalMode();");
+        });
+        styleActionButton(toggleRemovalBtn, "#9c27b0"); // Purple color
+
         // Fix the Clear All button to properly preserve the connector layer
         Button clearAllBtn = new Button("Clear All", e -> {
             // First deselect any selected component
@@ -885,7 +1151,7 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
         });
         styleActionButton(saveAsButton, "#28a745");
 
-        btnLayout.add(saveAsButton);
+        btnLayout.add(saveAsButton, toggleRemovalBtn);
 
         btnLayout.setWidthFull();
         btnLayout.setJustifyContentMode(JustifyContentMode.CENTER);
@@ -928,18 +1194,27 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
 
         if (selectedComponent != null &&
                 workflowCanvas.getChildren().anyMatch(ch -> ch.equals(selectedComponent))) {
+            String nodeId = selectedComponent.getElement().getAttribute("data-node-id");
             workflowCanvas.remove(selectedComponent);
             nodeProperties.remove(selectedComponent);
+            nodeIdMap.values().removeIf(component -> component == selectedComponent);
+
+            if (nodeId != null) {
+                // First remove the node connections
+                UI.getCurrent().getPage().executeJs(
+                        "if (window.workflowConnections) { window.workflowConnections.removeNodeConnections($0); }",
+                        nodeId);
+
+                // Then refresh all endpoints to ensure consistency
+                UI.getCurrent().getPage().executeJs(
+                        "setTimeout(() => { if (window.workflowConnections) window.workflowConnections.refreshAllEndpoints(); }, 100);");
+            }
+
             selectedComponent = null;
 
             // Use the standard way of hiding the panel
             propertiesPanel.getStyle().set("right", "-300px");
             workflowCanvas.getStyle().remove("margin-right");
-
-            // Update connectors after deletion
-            UI.getCurrent().getPage().executeJs(
-                    "setTimeout(() => { if (window.updateConnectors) window.updateConnectors($0); }, 50);",
-                    workflowCanvas.getElement());
         } else {
             Notification.show("No component selected to delete!");
         }
@@ -995,6 +1270,10 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
                     // Add this debug logging right before saving
                     System.out.println("About to save workflow with data: " + jsonData);
                     entity.setData(jsonData);
+
+                    // Set the organization
+                    entity.setOrganization(organizationService.getCurrentOrganization());
+
                     workflowJsonRepository.save(entity);
                     Notification.show("Workflow saved with ID: " + entity.getId());
 
@@ -1020,6 +1299,9 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
 
     private void saveWorkflow() {
         try {
+            // Get current organization
+            OrganizationEntity organization = organizationService.getCurrentOrganization();
+
             List<Map<String, Object>> nodesData = new ArrayList<>();
             workflowCanvas.getChildren()
                     .filter(c -> c != connectorLayer)
@@ -1032,26 +1314,73 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
                             nodeMap.put("description", props.description);
                             nodeMap.put("props", props.additionalProperties);
                             nodeMap.put("order", workflowCanvas.indexOf(component));
+
+                            // Save the node ID
+                            String nodeId = component.getElement().getAttribute("data-node-id");
+                            if (nodeId != null) {
+                                nodeMap.put("id", nodeId);
+                            }
+
+                            // Save the position of the component
+                            String left = component.getElement().getStyle().get("left");
+                            String top = component.getElement().getStyle().get("top");
+                            if (left != null && top != null) {
+                                Map<String, String> position = new HashMap<>();
+                                position.put("left", left);
+                                position.put("top", top);
+                                nodeMap.put("position", position);
+                            }
+
                             nodesData.add(nodeMap);
                         }
                     });
 
+            Map<String, Object> workflowData = new HashMap<>();
+            workflowData.put("nodes", nodesData);
+            workflowData.put("connections", connections);
+
+            System.out.println("Saving workflow with connections: " + connections);
+
             ObjectMapper mapper = new ObjectMapper();
-            String jsonData = mapper.writeValueAsString(nodesData);
+            String jsonData = mapper.writeValueAsString(workflowData);
 
             String path = UI.getCurrent().getInternals().getActiveViewLocation().getPath();
             if (path.matches("workflow-creator/\\d+")) {
                 Long workflowId = Long.parseLong(path.substring(path.lastIndexOf('/') + 1));
-                workflowJsonRepository.findById(workflowId).ifPresent(entity -> {
+
+                // Find workflow by ID AND organization
+                Optional<WorkflowJsonEntity> workflowOpt = workflowJsonRepository.findById(workflowId);
+
+                if (workflowOpt.isPresent()) {
+                    WorkflowJsonEntity entity = workflowOpt.get();
+
+                    // Check if workflow belongs to current organization
+                    if (entity.getOrganization() != null &&
+                            !entity.getOrganization().getId().equals(organization.getId())) {
+                        // If workflow belongs to another organization, save as new
+                        WorkflowJsonEntity newEntity = new WorkflowJsonEntity();
+                        newEntity.setData(jsonData);
+                        showSaveDialog(jsonData);
+                        return;
+                    }
+
                     entity.setData(jsonData);
+                    // Set organization if not already set
+                    if (entity.getOrganization() == null) {
+                        entity.setOrganization(organization);
+                    }
+
                     System.out.println("Saving workflow with data: " + jsonData);
                     workflowJsonRepository.save(entity);
                     Notification.show("Workflow updated successfully");
-                    System.out.println("Calling saveWorkflow()");
+
                     // Generate and deploy the OPA policy for this workflow
                     String policy = generateWorkflowPolicy(entity.getId());
                     workflowOPAService.deployWorkflowPolicy(entity.getId(), policy);
-                });
+                } else {
+                    // Workflow not found, create new
+                    showSaveDialog(jsonData);
+                }
             } else {
                 showSaveDialog(jsonData);
             }
@@ -1109,6 +1438,11 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
     private void setEditMode(boolean editMode) {
         this.editMode = editMode;
 
+        // Update jsPlumb edit mode
+        UI.getCurrent().getPage().executeJs(
+                "if (window.workflowConnections) { window.workflowConnections.setEditMode($0); }",
+                editMode);
+
         // Hide properties panel when edit mode is disabled
         if (!editMode) {
             deselectComponent();
@@ -1119,7 +1453,7 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
                     .set("visibility", "hidden");
             workflowCanvas.getStyle().remove("margin-right");
 
-            // Apply subtle visual indication for read-only components
+            // Apply visual indication for read-only components
             workflowCanvas.getChildren().forEach(component -> {
                 if (component instanceof Button && component != connectorLayer) {
                     component.getStyle()
@@ -1148,19 +1482,13 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
             clearAllBtn.setEnabled(editMode);
         }
 
-        // Update all buttons in the workflow canvas
-        workflowCanvas.getChildren().forEach(component -> {
-            if (component instanceof Button && component != connectorLayer) {
-                Button btn = (Button) component;
-                DragSource<Button> dragSource = DragSource.create(btn);
-                dragSource.setDraggable(editMode);
-            }
-        });
-
-        // Update drag sources in the components panel too
+        // Only make toolbar buttons draggable with Vaadin
+        // Canvas buttons will be draggable with jsPlumb
         componentsPanel.getChildren().forEach(component -> {
             if (component instanceof Button) {
                 Button btn = (Button) component;
+
+                // For toolbar/component panel buttons, use Vaadin drag
                 DragSource<Button> dragSource = DragSource.create(btn);
                 dragSource.setDraggable(editMode);
 
@@ -1176,6 +1504,9 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
                 }
             }
         });
+
+        // For canvas buttons, we don't need to update draggable state here
+        // because jsPlumb will handle it based on the edit mode we set earlier
     }
 
     private void showSaveAsDialog(WorkflowJsonEntity entity) {
@@ -1193,6 +1524,10 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
                 WorkflowJsonEntity newWorkflow = new WorkflowJsonEntity();
                 newWorkflow.setName(newWorkflowName);
                 newWorkflow.setData(entity.getData()); // Copy the JSON from the existing workflow
+
+                // Set organization
+                newWorkflow.setOrganization(organizationService.getCurrentOrganization());
+
                 workflowJsonRepository.save(newWorkflow);
                 Notification.show("Workflow saved as '" + newWorkflowName + "'");
                 dialog.close();
@@ -1234,6 +1569,59 @@ public class WorkflowCreatorView extends VerticalLayout implements HasUrlParamet
                 workflowCanvas.getElement()));
     }
 
-    // -- Other methods (e.g. createActionButtons, deleteSelected, setEditMode,
-    // etc.) remain unchanged --
+    private void refreshWorkflowConnections() {
+        UI.getCurrent().getPage().executeJs(
+                "if (window.workflowConnections) { " +
+                        "  setTimeout(() => window.workflowConnections.refreshAllEndpoints(), 100); " +
+                        "}");
+    }
+
+    private void arrangeNodesInGrid() {
+        List<Component> nodes = workflowCanvas.getChildren()
+                .filter(c -> c != connectorLayer)
+                .collect(Collectors.toList());
+
+        int nodeCount = nodes.size();
+        if (nodeCount <= 1)
+            return;
+
+        // Check if nodes are stacked (have similar positions)
+        boolean nodesAreStacked = true;
+        String firstLeft = null;
+        String firstTop = null;
+
+        for (Component node : nodes) {
+            String left = node.getElement().getStyle().get("left");
+            String top = node.getElement().getStyle().get("top");
+
+            if (firstLeft == null) {
+                firstLeft = left;
+                firstTop = top;
+            } else if (!firstLeft.equals(left) || !firstTop.equals(top)) {
+                nodesAreStacked = false;
+                break;
+            }
+        }
+
+        // If nodes are stacked, arrange them in a grid
+        if (nodesAreStacked) {
+            int cols = Math.min(3, nodeCount); // Max 3 columns
+            int rows = (int) Math.ceil(nodeCount / (double) cols);
+
+            for (int i = 0; i < nodeCount; i++) {
+                Component node = nodes.get(i);
+                int row = i / cols;
+                int col = i % cols;
+
+                node.getElement().getStyle()
+                        .set("left", (50 + (col * 200)) + "px")
+                        .set("top", (50 + (row * 120)) + "px");
+            }
+
+            // Force a repaint of connections
+            UI.getCurrent().getPage().executeJs(
+                    "setTimeout(() => { if (window.workflowConnections) window.workflowConnections.repaintEverything(); }, 300);");
+        }
+    }
+
 }

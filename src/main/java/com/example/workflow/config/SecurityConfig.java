@@ -54,9 +54,15 @@ public class SecurityConfig {
         // Rest of your configuration...
         http.authorizeHttpRequests(req -> {
             req.requestMatchers("VAADIN/**", "/favicon.ico").permitAll();
+            req.requestMatchers("/manifest.webmanifest", "/favicon.ico", "/images/**", "/offline-stub.html")
+                    .permitAll();
             req.anyRequest().authenticated();
         });
-
+        http.oauth2Login(oauth2 -> oauth2
+                .defaultSuccessUrl("/", true) // Force redirect to root after login
+                .userInfoEndpoint(userInfo -> userInfo
+                        .oidcUserService(this.oidcUserService()) // Ensure custom service is used
+                ));
         http.oauth2Login(Customizer.withDefaults());
 
         // Logout configuration.

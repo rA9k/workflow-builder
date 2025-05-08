@@ -1,9 +1,6 @@
 package com.example.workflow.components.nodes;
 
-import com.example.workflow.model.WorkflowExecutionEntity;
-import com.example.workflow.service.WorkflowExecutionEngine;
 import com.vaadin.flow.component.Component;
-import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H3;

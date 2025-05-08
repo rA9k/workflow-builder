@@ -70,6 +70,7 @@
     "@vaadin/virtual-list": "24.1.10",
     "construct-style-sheets-polyfill": "3.1.0",
     "date-fns": "2.29.3",
+    "jsplumb": "^2.15.6",
     "lit": "2.7.6",
     "mobile-drag-drop": "2.3.0-rc.2",
     "print-js": "1.6.0"
@@ -183,7 +184,7 @@
       "workbox-core": "7.0.0",
       "workbox-precaching": "7.0.0"
     },
-    "hash": "bc79c8319bfcf92f61af6284904c2d25ae7785e59b04c5ed248a062e9a3de063"
+    "hash": "d9f829de7850598b257235d14199a80de96d794d586179e1fc41f5a86f751e74"
   },
   "overrides": {
     "@vaadin/bundles": "$@vaadin/bundles",
@@ -255,6 +256,7 @@
     "@vaadin/virtual-list": "$@vaadin/virtual-list",
     "@vaadin-component-factory/vcf-pdf-viewer": "$@vaadin-component-factory/vcf-pdf-viewer",
     "print-js": "$print-js",
-    "mobile-drag-drop": "$mobile-drag-drop"
+    "mobile-drag-drop": "$mobile-drag-drop",
+    "jsplumb": "$jsplumb"
   }
 }

@@ -1,6 +1,9 @@
 package com.example.workflow.service;
 
+import com.example.workflow.entity.OrganizationEntity;
 import com.fasterxml.jackson.databind.JsonNode;
+
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -12,6 +15,9 @@ import java.util.Map;
 public class WorkflowOPAService {
 
     private final WebClient opaWebClient;
+
+    @Autowired
+    private OrganizationService organizationService;
 
     public WorkflowOPAService(@Value("${opa.url}") String opaUrl) {
         this.opaWebClient = WebClient.builder()
@@ -28,16 +34,21 @@ public class WorkflowOPAService {
         String policyPackage = "workflow_" + workflowId;
         System.out.println("Deploying policy for " + policyPackage + ":\n" + policyContent);
 
-        opaWebClient.put()
-                .uri("/v1/policies/" + policyPackage)
-                .header("Content-Type", "text/plain")
-                .bodyValue(policyContent)
-                .retrieve()
-                .bodyToMono(String.class)
-                .doOnError(error -> {
-                    System.err.println("Error deploying policy: " + error.getMessage());
-                })
-                .block();
+        try {
+            opaWebClient.put()
+                    .uri("/v1/policies/" + policyPackage)
+                    .header("Content-Type", "text/plain")
+                    .bodyValue(policyContent)
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .doOnError(error -> {
+                        System.err.println("Error deploying policy: " + error.getMessage());
+                    })
+                    .block();
+        } catch (Exception e) {
+            System.err.println("Error deploying workflow policy: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 
     /**
@@ -81,9 +92,12 @@ public class WorkflowOPAService {
      * field (such as username or role).
      */
     public boolean isActionAllowed(String policyPackage, String action, String valueToCheck, String fieldName) {
+        OrganizationEntity organization = organizationService.getCurrentOrganization();
+
         Map<String, Object> input = new HashMap<>();
         input.put("action", action);
         input.put(fieldName, valueToCheck);
+        input.put("organization_id", organization.getId()); // Add organization ID to policy input
 
         Map<String, Object> requestBody = Map.of("input", input);
 
@@ -97,8 +111,9 @@ public class WorkflowOPAService {
 
             boolean allowed = response != null && response.path("result").asBoolean(false);
             System.out.println(
-                    "Instance-specific OPA check for action [" + action + "] with " + fieldName + " [" + valueToCheck +
-                            "] on policy package [" + policyPackage + "] returned: " + allowed);
+                    "OPA check for action [" + action + "] with " + fieldName + " [" + valueToCheck +
+                            "] on policy package [" + policyPackage + "] for organization [" + organization.getName() +
+                            "] returned: " + allowed);
             return allowed;
         } catch (Exception e) {
             System.err.println("Error checking execution permissions: " + e.getMessage());
@@ -106,10 +121,6 @@ public class WorkflowOPAService {
         }
     }
 
-    /**
-     * Evaluates workflow-level permission (for actions other than upload on
-     * workflow creation).
-     */
     public boolean isActionAllowed(Long workflowId, String action, String role) {
         String policyPackage = "workflow_" + workflowId;
         Map<String, Object> input = new HashMap<>();
@@ -118,16 +129,24 @@ public class WorkflowOPAService {
 
         Map<String, Object> requestBody = Map.of("input", input);
 
-        JsonNode response = opaWebClient.post()
-                .uri("/v1/data/" + policyPackage + "/allow")
-                .bodyValue(requestBody)
-                .retrieve()
-                .bodyToMono(JsonNode.class)
-                .block();
+        try {
+            JsonNode response = opaWebClient.post()
+                    .uri("/v1/data/" + policyPackage + "/allow")
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToMono(JsonNode.class)
+                    .block();
 
-        boolean allowed = response != null && response.path("result").asBoolean(false);
-        System.out.println("OPA check for action [" + action + "] with role [" + role + "] on workflow_" + workflowId
-                + " returned: " + allowed);
-        return allowed;
+            boolean allowed = response != null && response.path("result").asBoolean(false);
+            System.out
+                    .println("OPA check for action [" + action + "] with role [" + role + "] on workflow_" + workflowId
+                            + " returned: " + allowed);
+            return allowed;
+        } catch (Exception e) {
+            System.err.println("Error checking workflow roles: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
     }
+
 }

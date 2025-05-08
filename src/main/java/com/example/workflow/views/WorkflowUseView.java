@@ -1,10 +1,12 @@
 package com.example.workflow.views;
 
 import com.example.workflow.components.WorkflowExecutionComponent;
+import com.example.workflow.entity.OrganizationEntity;
 import com.example.workflow.model.WorkflowDefinition;
 import com.example.workflow.model.WorkflowExecutionEntity;
 import com.example.workflow.repository.WorkflowExecutionRepository;
 import com.example.workflow.repository.WorkflowJsonRepository;
+import com.example.workflow.service.OrganizationService;
 import com.example.workflow.service.WorkflowExecutionEngine;
 import com.example.workflow.service.WorkflowOPAService;
 import com.vaadin.flow.component.UI;
@@ -19,6 +21,8 @@ import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.router.*;
+
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -39,6 +43,9 @@ public class WorkflowUseView extends VerticalLayout implements HasUrlParameter<L
     private final WorkflowExecutionEngine executionEngine;
     private final WorkflowOPAService workflowOPAService;
     private Div contentContainer;
+
+    @Autowired
+    private OrganizationService organizationService;
 
     // Add this as a class field
     private VerticalLayout progressLayout;
@@ -105,6 +112,18 @@ public class WorkflowUseView extends VerticalLayout implements HasUrlParameter<L
 
             if (executionOpt.isPresent()) {
                 WorkflowExecutionEntity execution = executionOpt.get();
+
+                // Check organization ownership
+                OrganizationEntity currentOrg = organizationService.getCurrentOrganization();
+                if (execution.getOrganization() == null ||
+                        !execution.getOrganization().getId().equals(currentOrg.getId())) {
+                    // Redirect to workflows list with error message
+                    UI.getCurrent().navigate(WorkflowInUseListView.class);
+                    Notification.show("You don't have permission to view this workflow",
+                            3000, Notification.Position.MIDDLE);
+                    return;
+                }
+
                 String currentUsername = getCurrentUsername();
                 List<String> userRoles = getCurrentUserRoles();
 
@@ -213,6 +232,16 @@ public class WorkflowUseView extends VerticalLayout implements HasUrlParameter<L
                 workflowJsonRepository.findById(parameter).ifPresentOrElse(
                         entity -> {
                             try {
+                                // Check organization ownership
+                                OrganizationEntity currentOrg = organizationService.getCurrentOrganization();
+                                if (entity.getOrganization() == null ||
+                                        !entity.getOrganization().getId().equals(currentOrg.getId())) {
+                                    Notification.show("You don't have permission to use this workflow",
+                                            3000, Notification.Position.MIDDLE);
+                                    UI.getCurrent().navigate(WorkflowViewerView.class);
+                                    return;
+                                }
+
                                 // Create workflow definition
                                 WorkflowDefinition definition = new WorkflowDefinition(entity);
 
@@ -256,6 +285,16 @@ public class WorkflowUseView extends VerticalLayout implements HasUrlParameter<L
                 workflowExecutionRepository.findById(parameter).ifPresentOrElse(
                         execution -> {
                             try {
+                                // Check organization ownership
+                                OrganizationEntity currentOrg = organizationService.getCurrentOrganization();
+                                if (execution.getOrganization() == null ||
+                                        !execution.getOrganization().getId().equals(currentOrg.getId())) {
+                                    Notification.show("You don't have permission to view this workflow",
+                                            3000, Notification.Position.MIDDLE);
+                                    UI.getCurrent().navigate(WorkflowInUseListView.class);
+                                    return;
+                                }
+
                                 // Create workflow definition from the execution's workflow
                                 WorkflowDefinition definition = new WorkflowDefinition(execution.getWorkflow());
 

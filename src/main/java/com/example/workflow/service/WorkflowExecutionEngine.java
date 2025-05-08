@@ -1,6 +1,7 @@
 package com.example.workflow.service;
 
 import com.example.workflow.components.nodes.WorkflowNode;
+import com.example.workflow.entity.OrganizationEntity;
 import com.example.workflow.model.WorkflowDefinition;
 import com.example.workflow.model.WorkflowExecutionEntity;
 import com.example.workflow.repository.WorkflowExecutionRepository;
@@ -23,6 +24,9 @@ public class WorkflowExecutionEngine {
     private WorkflowExecutionRepository executionRepository;
 
     @Autowired
+    private OrganizationService organizationService;
+
+    @Autowired
     private WorkflowOPAService opaService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -41,6 +45,9 @@ public class WorkflowExecutionEngine {
         execution.setStatus("In Progress");
         execution.setCurrentNodeIndex(0);
         execution.setCreatedBy(username);
+
+        // Set organization from the workflow's organization
+        execution.setOrganization(definition.getEntity().getOrganization());
 
         // Initialize node statuses
         Map<String, String> nodeStatuses = new HashMap<>();
@@ -67,7 +74,9 @@ public class WorkflowExecutionEngine {
      * @throws RuntimeException if the execution is not found
      */
     public WorkflowExecutionEntity getExecution(Long executionId) {
-        Optional<WorkflowExecutionEntity> executionOpt = executionRepository.findById(executionId);
+        OrganizationEntity organization = organizationService.getCurrentOrganization();
+        Optional<WorkflowExecutionEntity> executionOpt = executionRepository.findByIdAndOrganization(executionId,
+                organization);
         if (executionOpt.isEmpty()) {
             throw new RuntimeException("Execution not found: " + executionId);
         }

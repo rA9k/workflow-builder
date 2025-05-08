@@ -1,9 +1,12 @@
 package com.example.workflow.views;
 
+import com.example.workflow.entity.OrganizationEntity;
 import com.example.workflow.model.WorkflowExecutionEntity;
 import com.example.workflow.model.WorkflowJsonEntity;
 import com.example.workflow.repository.WorkflowExecutionRepository;
 import com.example.workflow.repository.WorkflowJsonRepository;
+import com.example.workflow.service.OrganizationService;
+import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.dialog.Dialog;
@@ -14,6 +17,8 @@ import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.router.Route;
+
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -25,10 +30,15 @@ public class WorkflowViewerView extends VerticalLayout {
     private final WorkflowExecutionRepository workflowExecutionRepository;
     private final Grid<WorkflowJsonEntity> workflowGrid = new Grid<>(WorkflowJsonEntity.class);
 
+    @Autowired
+    private OrganizationService organizationService;
+
     public WorkflowViewerView(WorkflowJsonRepository workflowJsonRepository,
-            WorkflowExecutionRepository workflowExecutionRepository) {
+            WorkflowExecutionRepository workflowExecutionRepository,
+            OrganizationService organizationService) {
         this.workflowJsonRepository = workflowJsonRepository;
         this.workflowExecutionRepository = workflowExecutionRepository;
+        this.organizationService = organizationService;
 
         // Overall layout styling for a modern feel
         addClassName("workflow-viewer");
@@ -54,11 +64,18 @@ public class WorkflowViewerView extends VerticalLayout {
 
         // Setup grid with modern theme variants and styling
         setupGrid();
-        loadWorkflows();
+        // loadWorkflows();
 
         // Add components to the view
         add(title, toolbar, workflowGrid);
         expand(workflowGrid);
+    }
+
+    @Override
+    protected void onAttach(AttachEvent attachEvent) {
+        super.onAttach(attachEvent);
+        // Now it's safe to call loadWorkflows
+        loadWorkflows();
     }
 
     private void setupGrid() {
@@ -116,12 +133,21 @@ public class WorkflowViewerView extends VerticalLayout {
     }
 
     private void loadWorkflows() {
-        List<WorkflowJsonEntity> workflows = workflowJsonRepository.findAll();
+        OrganizationEntity organization = organizationService.getCurrentOrganization();
+        List<WorkflowJsonEntity> workflows = workflowJsonRepository.findByOrganization(organization);
         workflowGrid.setItems(workflows);
     }
 
     @Transactional
     private void showDeleteConfirmationDialog(WorkflowJsonEntity entity) {
+        // Check if workflow belongs to current organization
+        OrganizationEntity organization = organizationService.getCurrentOrganization();
+        if (entity.getOrganization() == null ||
+                !entity.getOrganization().getId().equals(organization.getId())) {
+            Notification.show("You don't have permission to delete this workflow",
+                    3000, Notification.Position.MIDDLE);
+            return;
+        }
         Dialog dialog = new Dialog();
         dialog.setHeaderTitle("Confirm Deletion");
         dialog.add("Are you sure you want to permanently delete this workflow?");

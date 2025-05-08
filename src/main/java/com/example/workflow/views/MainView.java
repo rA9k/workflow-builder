@@ -1,27 +1,64 @@
 package com.example.workflow.views;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
+
 import com.example.workflow.repository.WorkflowExecutionRepository;
 import com.example.workflow.repository.WorkflowJsonRepository;
+import com.example.workflow.service.OrganizationService;
 import com.example.workflow.service.WorkflowExecutionService;
+import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.applayout.AppLayout;
 import com.vaadin.flow.component.applayout.DrawerToggle;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.html.H1;
+import com.vaadin.flow.component.html.H2;
+import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
+import com.vaadin.flow.component.orderedlayout.FlexComponent.Alignment;
+import com.vaadin.flow.component.orderedlayout.FlexComponent.JustifyContentMode;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.tabs.Tab;
 import com.vaadin.flow.component.tabs.Tabs;
+import com.vaadin.flow.router.BeforeEnterEvent;
+import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.router.RouterLink;
 
 @Route("")
 @PageTitle("Workflow App")
-public class MainView extends AppLayout {
+public class MainView extends AppLayout implements BeforeEnterObserver {
+
+    @Autowired
+    private OrganizationService organizationService;
+
+    @Autowired
+    private ApplicationContext applicationContext;
+
+    @Override
+    protected void onAttach(AttachEvent attachEvent) {
+        super.onAttach(attachEvent);
+        // Now you can safely use organizationService
+    }
+
+    @Override
+    public void beforeEnter(BeforeEnterEvent event) {
+        try {
+            // Try to get current organization
+            organizationService.getCurrentOrganization();
+        } catch (IllegalStateException e) {
+            // If no organization is found, show error
+            Notification.show("No organization context found. Please contact your administrator.",
+                    3000, Notification.Position.MIDDLE);
+        }
+    }
+
     public MainView(WorkflowExecutionRepository workflowExecutionRepository,
             WorkflowJsonRepository workflowJsonRepository,
-            WorkflowExecutionService workflowExecutionService) {
+            WorkflowExecutionService workflowExecutionService,
+            WorkflowInUseListView workflowInUseListView) { // Add this parameter
 
         DrawerToggle toggle = new DrawerToggle();
 
@@ -56,8 +93,16 @@ public class MainView extends AppLayout {
         addToDrawer(drawerContent);
         addToNavbar(toggle, title);
 
-        setContent(new WorkflowInUseListView(workflowExecutionRepository, workflowJsonRepository,
-                workflowExecutionService));
+        // Use the injected instance instead of creating a new one
+        VerticalLayout welcomeLayout = new VerticalLayout();
+        welcomeLayout.setSizeFull();
+        welcomeLayout.setJustifyContentMode(JustifyContentMode.CENTER);
+        welcomeLayout.setAlignItems(Alignment.CENTER);
+
+        H2 welcomeText = new H2("Welcome to Workflow Builder");
+        welcomeLayout.add(welcomeText);
+
+        setContent(welcomeLayout);
     }
 
     private Tabs getTabs() {

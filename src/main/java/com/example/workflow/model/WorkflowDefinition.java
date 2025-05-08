@@ -38,18 +38,24 @@ public class WorkflowDefinition {
 
         try {
             ObjectMapper mapper = new ObjectMapper();
-            List<Map<String, Object>> nodesData = mapper.readValue(
+            Map<String, Object> workflowData = mapper.readValue(
                     entity.getData(),
-                    new TypeReference<List<Map<String, Object>>>() {
+                    new TypeReference<Map<String, Object>>() {
                     });
+
+            List<Map<String, Object>> nodesData = (List<Map<String, Object>>) workflowData.get("nodes");
 
             for (Map<String, Object> nodeData : nodesData) {
                 WorkflowNode node = WorkflowNodeFactory.fromMap(nodeData);
                 nodes.add(node);
             }
+
+            // Handle connections if needed
+
         } catch (Exception e) {
             throw new RuntimeException("Error parsing workflow definition", e);
         }
+
     }
 
     /**

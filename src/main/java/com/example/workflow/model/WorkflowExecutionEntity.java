@@ -1,5 +1,6 @@
 package com.example.workflow.model;
 
+import com.example.workflow.entity.OrganizationEntity;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.*;
@@ -53,6 +54,19 @@ public class WorkflowExecutionEntity {
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "organization_id")
+    private OrganizationEntity organization;
+
+    // Add getter and setter
+    public OrganizationEntity getOrganization() {
+        return organization;
+    }
+
+    public void setOrganization(OrganizationEntity organization) {
+        this.organization = organization;
+    }
 
     @PrePersist
     public void prePersist() {

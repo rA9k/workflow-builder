@@ -1,9 +1,12 @@
 package com.example.workflow.views;
 
+import com.example.workflow.entity.OrganizationEntity;
 import com.example.workflow.model.WorkflowExecutionEntity;
 import com.example.workflow.repository.WorkflowExecutionRepository;
 import com.example.workflow.repository.WorkflowJsonRepository;
+import com.example.workflow.service.OrganizationService;
 import com.example.workflow.service.WorkflowExecutionService;
+import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.dependency.CssImport;
@@ -21,10 +24,13 @@ import com.vaadin.flow.data.renderer.ComponentRenderer;
 import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.spring.annotation.UIScope;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.format.DateTimeFormatter;
@@ -32,6 +38,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
+@UIScope
+@Component
 @CssImport("styles/wave-styles.css")
 @Route(value = "workflows-in-use", layout = MainView.class)
 @PageTitle("Workflows In Use")
@@ -40,6 +48,9 @@ public class WorkflowInUseListView extends VerticalLayout {
     private final WorkflowExecutionService workflowExecutionService;
     private Grid<WorkflowExecutionEntity> grid;
     private TextField filter;
+
+    @Autowired
+    private OrganizationService organizationService;
 
     public WorkflowInUseListView(WorkflowExecutionRepository workflowExecutionRepository,
             WorkflowJsonRepository workflowJsonRepository,
@@ -70,6 +81,13 @@ public class WorkflowInUseListView extends VerticalLayout {
 
         add(header, actionBar, grid, buttonLayout);
 
+        // refreshGrid();
+    }
+
+    @Override
+    protected void onAttach(AttachEvent attachEvent) {
+        super.onAttach(attachEvent);
+        // Now it's safe to call refreshGrid
         refreshGrid();
     }
 
@@ -106,10 +124,19 @@ public class WorkflowInUseListView extends VerticalLayout {
 
             try {
                 com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                java.util.List<java.util.Map<String, Object>> workflowNodes = mapper.readValue(
+                java.util.Map<String, Object> workflowData = mapper.readValue(
                         entity.getWorkflow().getData(),
-                        new com.fasterxml.jackson.core.type.TypeReference<java.util.List<java.util.Map<String, Object>>>() {
+                        new com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String, Object>>() {
                         });
+                // Then extract the nodes list from the map
+                java.util.List<java.util.Map<String, Object>> workflowNodes = (java.util.List<java.util.Map<String, Object>>) workflowData
+                        .get("nodes");
+
+                if (workflowNodes == null) {
+                    // Handle the case where there's no nodes property
+                    return new Span(new com.vaadin.flow.component.Html(
+                            "<span style='padding: 0.25em 0.5em; border-radius: 4px; background-color: #E0E0E0; color: black;'>Unknown Stage</span>"));
+                }
 
                 int currentNodeIndex = entity.getCurrentNodeIndex();
                 if (currentNodeIndex >= 0 && currentNodeIndex < workflowNodes.size()) {
@@ -142,10 +169,15 @@ public class WorkflowInUseListView extends VerticalLayout {
                     }
                 }
             } catch (Exception e) {
-                // Handle parsing errors
-                stageName = "Error: " + e.getMessage();
-            }
+                // Add more detailed logging
+                System.err.println("Error parsing workflow data: " + e.getMessage());
+                e.printStackTrace();
 
+                // Handle parsing errors
+                return new Span(new com.vaadin.flow.component.Html(
+                        "<span style='padding: 0.25em 0.5em; border-radius: 4px; background-color: #E0E0E0; color: black;'>Error: "
+                                + e.getMessage() + "</span>"));
+            }
             // Return a Span with inline styles
             return new Span(
                     new com.vaadin.flow.component.Html("<span style='" + badgeStyle + "'>" + stageName + "</span>"));
@@ -266,9 +298,11 @@ public class WorkflowInUseListView extends VerticalLayout {
     private void refreshGrid() {
         String currentUsername = getCurrentUsername();
         List<String> userRoles = getCurrentUserRoles();
+        OrganizationEntity organization = organizationService.getCurrentOrganization();
 
+        // Get executions filtered by organization and user permissions
         List<WorkflowExecutionEntity> executions = workflowExecutionService
-                .getWorkflowExecutionsForUser(currentUsername, userRoles);
+                .getWorkflowExecutionsForUserAndOrganization(currentUsername, userRoles, organization);
         grid.setItems(executions);
     }
 
@@ -276,9 +310,11 @@ public class WorkflowInUseListView extends VerticalLayout {
         String filterText = filter.getValue().trim().toLowerCase();
         String currentUsername = getCurrentUsername();
         List<String> userRoles = getCurrentUserRoles();
+        OrganizationEntity organization = organizationService.getCurrentOrganization();
 
+        // Get executions filtered by organization and user permissions
         List<WorkflowExecutionEntity> executions = workflowExecutionService
-                .getWorkflowExecutionsForUser(currentUsername, userRoles);
+                .getWorkflowExecutionsForUserAndOrganization(currentUsername, userRoles, organization);
 
         if (!filterText.isEmpty()) {
             executions = executions.stream().filter(exec -> (exec.getUploadedFileName() != null &&

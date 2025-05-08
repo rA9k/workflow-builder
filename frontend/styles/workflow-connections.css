@@ -1,0 +1,290 @@
+/* Connection endpoints */
+.node-endpoint {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: #fff;
+  border: 2px solid #333;
+  z-index: 10;
+  cursor: pointer;
+}
+
+/* Simple hover effect without movement */
+.node-endpoint:hover {
+  background-color: #4CAF50;
+}
+
+.input-endpoint {
+  left: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.output-endpoint {
+  right: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* Style for workflow nodes to accommodate endpoints */
+.workflow-button {
+    position: relative !important; /* Force relative positioning */
+    z-index: 20;
+    margin: 0 15px;
+    touch-action: none; /* Prevents touch scrolling during drag */
+}
+
+/* Ensure proper dragging behavior */
+.jtk-drag-active {
+    cursor: move !important;
+    z-index: 100 !important;
+}
+
+/* Make sure the dragging element is visible and properly positioned */
+.jtk-drag-selected {
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+}
+
+/* Connection delete button */
+.connection-delete-btn {
+  background-color: #f44336;
+  color: white;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+  z-index: 30;
+}
+
+/* jsPlumb specific styles */
+.jtk-connector {
+  z-index: 5;
+}
+
+.jtk-endpoint {
+    z-index: 30;
+    position: absolute !important; /* Force absolute positioning */
+}
+
+.jtk-overlay {
+  z-index: 7;
+}
+
+/* Temporary connection styling */
+#temp-connection {
+  pointer-events: none;
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+  .node-endpoint {
+    width: 16px;
+    height: 16px;
+  }
+  
+  .workflow-button {
+    margin: 0 20px;
+  }
+}
+
+/* Highlight valid drop targets - without transform */
+.valid-target .node-endpoint {
+  background-color: #4CAF50;
+  box-shadow: 0 0 5px #4CAF50;
+}
+
+/* Highlight invalid drop targets - without transform */
+.invalid-target .node-endpoint {
+  background-color: #f44336;
+  box-shadow: 0 0 5px #f44336;
+}
+
+.connector-layer {
+    pointer-events: none;
+}
+
+/* Make connection paths interactive */
+.connector-layer svg path:not(#temp-connection) {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* Add a subtle highlight effect on path hover */
+.connector-layer svg path:not(#temp-connection):hover {
+  stroke-width: 3px;
+  stroke: #1a73e8;
+  cursor: pointer;
+}
+
+.connector-layer svg path:not(#temp-connection):active {
+  stroke: #f44336;
+}
+
+.connector-layer svg path:not(#temp-connection)::after {
+  content: "Double-click to remove";
+  position: absolute;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 5px;
+  border-radius: 4px;
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+
+.connector-layer svg path:not(#temp-connection):hover::after {
+  opacity: 1;
+}
+
+.removal-mode-notification {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 10px 20px;
+  border-radius: 4px;
+  z-index: 9999;
+  font-size: 14px;
+  text-align: center;
+}
+
+.connection-removal-mode .connector-layer svg path:not(#temp-connection) {
+  stroke-width: 10px;
+  opacity: 0.7;
+  cursor: pointer;
+}
+
+/* Add this to your CSS */
+.jtk-endpoint {
+    z-index: 20;
+    position: absolute;
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+}
+
+/* Improve dragging behavior */
+.workflow-button {
+    touch-action: none !important; /* Prevents touch scrolling during drag */
+    user-select: none !important; /* Prevents text selection during drag */
+    position: absolute !important; /* Ensure absolute positioning */
+}
+
+/* Ensure workflow canvas has proper positioning context */
+.workflow-canvas {
+    position: relative !important;
+    min-height: 500px;
+    padding: 20px;
+}
+
+/* Ensure workflow buttons in canvas are absolutely positioned */
+.workflow-canvas .workflow-button {
+    position: absolute !important;
+    min-width: 120px;
+    z-index: 10;
+}
+
+/* Ensure toolbar buttons are not absolutely positioned */
+.sidebar-panel .workflow-button {
+    position: relative !important;
+    display: block;
+    width: 100%;
+    margin-bottom: 10px;
+}
+
+/* Add a subtle transition for smoother movement */
+.workflow-button:not(.jtk-drag-active) {
+    transition: box-shadow 0.2s ease;
+}
+
+/* Visual feedback during dragging */
+.jtk-drag-active {
+    cursor: grabbing !important;
+    z-index: 1000 !important;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Ensure proper cursor */
+.workflow-canvas .workflow-button {
+    cursor: grab !important;
+}
+
+/* Ensure dragged elements stay above others */
+.jtk-drag-active {
+    z-index: 1000 !important;
+}
+
+/* Ensure proper positioning for workflow canvas */
+.workflow-canvas {
+    position: relative !important;
+    overflow: auto !important;
+    min-height: 500px;
+}
+
+/* Make sure node elements have position absolute */
+[data-node-id] {
+    position: absolute;
+    z-index: 10;
+}
+
+.jtk-connector {
+    z-index: 5;
+}
+
+.jtk-endpoint {
+    z-index: 20;
+}
+
+.jtk-overlay {
+    z-index: 7;
+}
+
+.jtk-endpoint.jtk-dragging,
+.jtk-connector.jtk-dragging {
+    z-index: 110;
+}
+
+.jtk-drag {
+    z-index: 100 !important;
+}
+  /* Make sure endpoints are visible and clickable */
+  .jtk-endpoint svg {
+      pointer-events: all !important;
+  }
+
+.connector-layer .jtk-endpoint,
+.connector-layer .jtk-connector {
+    pointer-events: all;
+}
+
+/* Ensure toolbar buttons don't stack */
+.toolbar-button {
+    display: block !important;
+    width: 100% !important;
+    margin-bottom: 10px !important;
+    position: relative !important; /* Not absolute for toolbar buttons */
+    z-index: 2;
+}
+
+/* Ensure canvas buttons are properly positioned */
+.workflow-canvas .workflow-button {
+    position: absolute !important;
+    z-index: 10;
+}
+
+/* Fix for jsPlumb endpoints */
+.jtk-endpoint {
+    z-index: 20;
+    position: absolute !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}

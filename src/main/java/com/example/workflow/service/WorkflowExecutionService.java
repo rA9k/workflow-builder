@@ -1,16 +1,21 @@
 package com.example.workflow.service;
 
+import com.example.workflow.entity.OrganizationEntity;
+import com.example.workflow.model.WorkflowDefinition;
 import com.example.workflow.model.WorkflowExecutionEntity;
 import com.example.workflow.model.WorkflowJsonEntity;
 import com.example.workflow.repository.WorkflowExecutionRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -18,18 +23,30 @@ public class WorkflowExecutionService {
 
     private final WorkflowExecutionRepository workflowExecutionRepository;
 
+    @Autowired
+    private OrganizationService organizationService;
+
     public WorkflowExecutionService(WorkflowExecutionRepository workflowExecutionRepository) {
         this.workflowExecutionRepository = workflowExecutionRepository;
     }
 
     @Transactional
-    public void deleteWorkflowExecution(Long id) {
-        workflowExecutionRepository.deleteById(id);
+    public void deleteWorkflowExecution(Long executionId) {
+        OrganizationEntity organization = organizationService.getCurrentOrganization();
+        Optional<WorkflowExecutionEntity> executionOpt = workflowExecutionRepository.findByIdAndOrganization(
+                executionId, organization);
+
+        if (executionOpt.isEmpty()) {
+            throw new RuntimeException("Execution not found or you don't have permission to delete it");
+        }
+
+        workflowExecutionRepository.delete(executionOpt.get());
     }
 
     @Transactional
     public List<WorkflowExecutionEntity> getWorkflowExecutions() {
-        return workflowExecutionRepository.findAllByOrderByUpdatedAtDesc();
+        OrganizationEntity organization = organizationService.getCurrentOrganization();
+        return workflowExecutionRepository.findByOrganizationOrderByUpdatedAtDesc(organization);
     }
 
     @Transactional
@@ -43,6 +60,10 @@ public class WorkflowExecutionService {
         execution.setCreatedBy(createdBy);
         String documentType = extractDocumentTypeFromWorkflow(workflow);
         execution.setDocumentType(documentType);
+
+        // Set organization from the workflow's organization
+        // This ensures consistency between workflow and its executions
+        execution.setOrganization(workflow.getOrganization());
 
         // Set initial node type and required role
         updateNodeTypeAndRequiredRole(execution);
@@ -113,10 +134,21 @@ public class WorkflowExecutionService {
                     // Case 2: Check if the user has the required role for the current node
                     try {
                         ObjectMapper mapper = new ObjectMapper();
-                        List<Map<String, Object>> workflowNodes = mapper.readValue(
+
+                        // First parse the JSON as a Map
+                        Map<String, Object> workflowDataMap = mapper.readValue(
                                 execution.getWorkflow().getData(),
-                                new TypeReference<List<Map<String, Object>>>() {
+                                new TypeReference<Map<String, Object>>() {
                                 });
+
+                        // Then extract the nodes list from the map
+                        List<Map<String, Object>> workflowNodes = (List<Map<String, Object>>) workflowDataMap
+                                .get("nodes");
+
+                        if (workflowNodes == null) {
+                            System.err.println("No nodes found in workflow data");
+                            return false;
+                        }
 
                         int currentNodeIndex = execution.getCurrentNodeIndex();
                         if (currentNodeIndex >= 0 && currentNodeIndex < workflowNodes.size()) {
@@ -146,6 +178,7 @@ public class WorkflowExecutionService {
                     } catch (Exception e) {
                         // Log error but don't fail the filter
                         System.err.println("Error checking workflow roles: " + e.getMessage());
+                        e.printStackTrace(); // Add stack trace for better debugging
                     }
 
                     return false;
@@ -174,4 +207,56 @@ public class WorkflowExecutionService {
         }
         return "Unknown";
     }
+
+    @Transactional
+    public List<WorkflowExecutionEntity> getWorkflowExecutionsForUserAndOrganization(
+            String username, List<String> roles, OrganizationEntity organization) {
+
+        // Get all executions for the organization
+        List<WorkflowExecutionEntity> executions = workflowExecutionRepository
+                .findByOrganizationOrderByUpdatedAtDesc(organization);
+
+        // Filter by user permissions
+        return executions.stream()
+                .filter(execution -> {
+                    // User can see their own executions
+                    if (execution.getCreatedBy().equals(username)) {
+                        return true;
+                    }
+
+                    // Check if user has role required for current node
+                    try {
+                        WorkflowDefinition definition = new WorkflowDefinition(execution.getWorkflow());
+                        int currentNodeIndex = execution.getCurrentNodeIndex();
+
+                        if (currentNodeIndex >= 0 && currentNodeIndex < definition.getNodeCount()) {
+                            var currentNode = definition.getNodeAt(currentNodeIndex);
+                            String nodeType = currentNode.getType();
+                            Map<String, String> props = currentNode.getProperties();
+
+                            // For Document Review nodes
+                            if ("Document Review".equals(nodeType)) {
+                                String reviewerRole = props.getOrDefault("reviewerRole", "");
+                                if (!reviewerRole.isEmpty() && roles.contains(reviewerRole)) {
+                                    return true;
+                                }
+                            }
+                            // For Approval nodes
+                            else if ("Approve/Reject".equals(nodeType)) {
+                                String approverRole = props.getOrDefault("Approver Role", "");
+                                if (!approverRole.isEmpty() && roles.contains(approverRole)) {
+                                    return true;
+                                }
+                            }
+                        }
+                    } catch (Exception e) {
+                        // Log error but don't fail the check
+                        System.err.println("Error checking workflow roles: " + e.getMessage());
+                    }
+
+                    return false;
+                })
+                .collect(Collectors.toList());
+    }
+
 }
